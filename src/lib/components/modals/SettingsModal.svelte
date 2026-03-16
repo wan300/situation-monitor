@@ -1,7 +1,8 @@
 <script lang="ts">
 	import Modal from './Modal.svelte';
-	import { settings } from '$lib/stores';
+	import { settings, ui, language } from '$lib/stores';
 	import { PANELS, type PanelId } from '$lib/config';
+	import { getPanelName } from '$lib/i18n';
 
 	interface Props {
 		open: boolean;
@@ -20,11 +21,11 @@
 	}
 </script>
 
-<Modal {open} title="Settings" {onClose}>
+	<Modal {open} title={$ui.settings.title} {onClose}>
 	<div class="settings-sections">
 		<section class="settings-section">
-			<h3 class="section-title">Enabled Panels</h3>
-			<p class="section-desc">Toggle panels on/off to customize your dashboard</p>
+			<h3 class="section-title">{$ui.settings.enabledPanels}</h3>
+			<p class="section-desc">{$ui.settings.sectionDesc}</p>
 
 			<div class="panels-grid">
 				{#each Object.entries(PANELS) as [id, config]}
@@ -36,7 +37,7 @@
 							checked={isEnabled}
 							onchange={() => handleTogglePanel(panelId)}
 						/>
-						<span class="panel-name">{config.name}</span>
+							<span class="panel-name">{getPanelName(panelId, $language)}</span>
 						<span class="panel-priority">P{config.priority}</span>
 					</label>
 				{/each}
@@ -44,12 +45,12 @@
 		</section>
 
 		<section class="settings-section">
-			<h3 class="section-title">Dashboard</h3>
+				<h3 class="section-title">{$ui.settings.dashboard}</h3>
 			{#if onReconfigure}
-				<button class="reconfigure-btn" onclick={onReconfigure}> Reconfigure Dashboard </button>
-				<p class="btn-hint">Choose a preset profile for your panels</p>
+					<button class="reconfigure-btn" onclick={onReconfigure}> {$ui.settings.reconfigure} </button>
+					<p class="btn-hint">{$ui.settings.presetHint}</p>
 			{/if}
-			<button class="reset-btn" onclick={handleResetPanels}> Reset All Settings </button>
+				<button class="reset-btn" onclick={handleResetPanels}> {$ui.settings.reset} </button>
 		</section>
 	</div>
 </Modal>

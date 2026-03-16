@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { PRESETS, PRESET_ORDER } from '$lib/config';
+	import { language, ui } from '$lib/stores';
+	import { getPresetCopy } from '$lib/i18n';
 
 	interface Props {
 		open: boolean;
@@ -31,27 +33,28 @@
 	<div class="modal-overlay">
 		<div class="modal onboarding-modal">
 			<div class="modal-header">
-				<button class="close-btn" onclick={handleClose} aria-label="Skip onboarding">
+				<button class="close-btn" onclick={handleClose} aria-label={$ui.onboarding.skip}>
 					&times;
 				</button>
-				<h2>Welcome to Situation Monitor</h2>
-				<p class="subtitle">Choose a dashboard configuration to get started</p>
+				<h2>{$ui.onboarding.welcome}</h2>
+				<p class="subtitle">{$ui.onboarding.subtitle}</p>
 			</div>
 
 			<div class="preset-grid">
 				{#each PRESET_ORDER as presetId}
 					{@const preset = PRESETS[presetId]}
+					{@const presetCopy = getPresetCopy(presetId, $language)}
 					<button class="preset-card" onclick={() => handleSelectPreset(presetId)}>
 						<div class="preset-icon">{preset.icon}</div>
-						<div class="preset-name">{preset.name}</div>
-						<div class="preset-description">{preset.description}</div>
-						<div class="preset-panel-count">{preset.panels.length} panels</div>
+						<div class="preset-name">{presetCopy.name}</div>
+						<div class="preset-description">{presetCopy.description}</div>
+						<div class="preset-panel-count">{$ui.common.panelCount(preset.panels.length)}</div>
 					</button>
 				{/each}
 			</div>
 
 			<div class="modal-footer">
-				<p class="hint">You can change this later in Settings</p>
+				<p class="hint">{$ui.onboarding.changeLater}</p>
 			</div>
 		</div>
 	</div>

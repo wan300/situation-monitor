@@ -3,6 +3,7 @@
 	import { timeAgo } from '$lib/utils';
 	import type { PanelId } from '$lib/config';
 	import type { NewsItem } from '$lib/types';
+	import { language, ui } from '$lib/stores';
 
 	interface SituationConfig {
 		title: string;
@@ -26,9 +27,9 @@
 	function calculateThreatLevel(
 		newsItems: NewsItem[],
 		criticalKeywords: string[] = []
-	): { level: string; text: string } {
+	): { level: string; key: 'monitoring' | 'elevated' | 'critical' } {
 		if (newsItems.length === 0) {
-			return { level: 'monitoring', text: 'MONITORING' };
+			return { level: 'monitoring', key: 'monitoring' };
 		}
 
 		const now = Date.now();
@@ -42,19 +43,19 @@
 		);
 
 		if (hasCritical || recentNews.length >= 3) {
-			return { level: 'critical', text: 'CRITICAL' };
+			return { level: 'critical', key: 'critical' };
 		}
 		if (recentNews.length >= 1) {
-			return { level: 'elevated', text: 'ELEVATED' };
+			return { level: 'elevated', key: 'elevated' };
 		}
-		return { level: 'monitoring', text: 'MONITORING' };
+		return { level: 'monitoring', key: 'monitoring' };
 	}
 </script>
 
 <Panel
 	id={panelId}
 	title={config.title}
-	status={threatLevel.text}
+	status={$ui.panels.situation.status[threatLevel.key]}
 	statusClass={threatLevel.level}
 	{loading}
 	{error}
@@ -66,7 +67,7 @@
 		</div>
 
 		{#if news.length === 0 && !loading && !error}
-			<div class="empty-state">No recent news</div>
+			<div class="empty-state">{$ui.panels.situation.empty}</div>
 		{:else}
 			<div class="situation-news">
 				{#each news.slice(0, 8) as item (item.id)}
@@ -74,7 +75,7 @@
 						<a href={item.link} target="_blank" rel="noopener noreferrer" class="headline">
 							{item.title}
 						</a>
-						<div class="meta">{item.source} · {timeAgo(item.timestamp)}</div>
+						<div class="meta">{item.source} · {timeAgo(item.timestamp, $language)}</div>
 					</div>
 				{/each}
 			</div>

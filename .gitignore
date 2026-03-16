@@ -6,6 +6,9 @@ node_modules/
 build/
 dist/
 
+# Vercel local output
+.vercel/
+
 # Environment
 .env
 .env.*
@@ -27,6 +30,11 @@ test-results/
 # Logs
 *.log
 npm-debug.log*
+
+# Local runtime data
+situation-monitor.db
+*.db-wal
+*.db-shm
 
 # OS files
 Thumbs.db

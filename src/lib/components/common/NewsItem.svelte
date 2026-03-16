@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { NewsItem } from '$lib/types';
 	import { timeAgo } from '$lib/utils';
+	import { language, ui } from '$lib/stores';
+	import { translateRegion } from '$lib/i18n';
 
 	interface Props {
 		item: NewsItem;
@@ -24,7 +26,7 @@
 		<div class="item-source">
 			{item.source}
 			{#if showAlert && item.isAlert}
-				<span class="alert-tag">ALERT</span>
+				<span class="alert-tag">{$ui.common.alert}</span>
 			{/if}
 		</div>
 	{/if}
@@ -38,9 +40,9 @@
 	{/if}
 
 	<div class="item-meta">
-		<span class="item-time">{timeAgo(item.timestamp)}</span>
+		<span class="item-time">{timeAgo(item.timestamp, $language)}</span>
 		{#if item.region}
-			<span class="item-region">{item.region}</span>
+			<span class="item-region">{translateRegion(item.region, $language)}</span>
 		{/if}
 	</div>
 </div>

@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { Panel, Badge } from '$lib/components/common';
 	import { getRelativeTime } from '$lib/utils';
-	import { intelNews } from '$lib/stores';
+	import { intelNews, language, ui } from '$lib/stores';
 	import type { NewsItem } from '$lib/types';
+	import { getSourceTypeLabel, translateRegion, translateTopic } from '$lib/i18n';
 
 	type SourceType = 'osint' | 'govt' | 'think-tank' | 'defense' | 'regional' | 'cyber';
 
@@ -63,9 +64,9 @@
 	}
 </script>
 
-<Panel id="intel" title="Intel Feed" {count} {loading} {error}>
+<Panel id="intel" title={$ui.panels.intel.title} {count} {loading} {error}>
 	{#if items.length === 0 && !loading && !error}
-		<div class="empty-state">No intel available</div>
+		<div class="empty-state">{$ui.panels.intel.empty}</div>
 	{:else}
 		<div class="intel-list">
 			{#each items as item (item.id)}
@@ -74,14 +75,14 @@
 						<span class="intel-source">{item.source}</span>
 						<div class="intel-tags">
 							<Badge
-								text={item.sourceType.toUpperCase()}
+								text={getSourceTypeLabel(item.sourceType, $language)}
 								variant={getSourceBadgeVariant(item.sourceType)}
 							/>
 							{#each item.regions.slice(0, 2) as region}
-								<Badge text={region} variant="info" />
+								<Badge text={translateRegion(region, $language)} variant="info" />
 							{/each}
 							{#each item.topics.slice(0, 2) as topic}
-								<Badge text={topic} />
+								<Badge text={translateTopic(topic, $language)} />
 							{/each}
 						</div>
 					</div>
@@ -90,7 +91,7 @@
 					</a>
 					{#if item.pubDate}
 						<div class="intel-meta">
-							<span>{getRelativeTime(item.pubDate)}</span>
+							<span>{getRelativeTime(item.pubDate, $language)}</span>
 						</div>
 					{/if}
 				</div>

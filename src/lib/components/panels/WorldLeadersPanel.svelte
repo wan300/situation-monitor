@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { Panel } from '$lib/components/common';
 	import type { WorldLeader } from '$lib/types';
+	import { language, ui } from '$lib/stores';
+	import {
+		localizeMonthYear,
+		translateCountry,
+		translateLeaderFocus,
+		translateLeaderTitle
+	} from '$lib/i18n';
 
 	interface Props {
 		leaders?: WorldLeader[];
@@ -19,9 +26,9 @@
 	}
 </script>
 
-<Panel id="leaders" title="World Leaders" {count} {loading} {error}>
+<Panel id="leaders" title={$ui.panels.leaders.title} {count} {loading} {error}>
 	{#if leaders.length === 0 && !loading && !error}
-		<div class="empty-state">No leaders data available</div>
+		<div class="empty-state">{$ui.panels.leaders.empty}</div>
 	{:else}
 		<div class="leaders-grid">
 			{#each leaders as leader (leader.id)}
@@ -33,21 +40,23 @@
 						<span class="leader-flag">{leader.flag}</span>
 						<div class="leader-info">
 							<div class="leader-name">{leader.name}</div>
-							<div class="leader-title">{leader.title}</div>
-							<div class="leader-country">{leader.country}</div>
+							<div class="leader-title">{translateLeaderTitle(leader.title, $language)}</div>
+							<div class="leader-country">{translateCountry(leader.country, $language)}</div>
 						</div>
 						{#if newsCount > 0}
 							<div class="leader-activity-badge">{newsCount}</div>
 						{/if}
 					</div>
 					<div class="leader-meta">
-						<span class="leader-since">Since {leader.since}</span>
+						<span class="leader-since">
+							{$ui.panels.leaders.since(localizeMonthYear(leader.since, $language))}
+						</span>
 						<span class="leader-party">{leader.party}</span>
 					</div>
 					{#if leader.focus && leader.focus.length > 0}
 						<div class="leader-focus-topics">
 							{#each leader.focus.slice(0, 3) as topic}
-								<span class="leader-focus">{topic}</span>
+								<span class="leader-focus">{translateLeaderFocus(topic, $language)}</span>
 							{/each}
 						</div>
 					{/if}

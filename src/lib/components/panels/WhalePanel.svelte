@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Panel } from '$lib/components/common';
+	import { formatCurrency, formatNumber } from '$lib/utils';
+	import { language, ui } from '$lib/stores';
 
 	interface WhaleTransaction {
 		coin: string;
@@ -19,19 +21,17 @@
 	const count = $derived(whales.length);
 
 	function formatAmount(amt: number): string {
-		return amt >= 1000 ? (amt / 1000).toFixed(1) + 'K' : amt.toFixed(2);
+		return formatNumber(amt, amt >= 1000 ? 1 : 2, $language);
 	}
 
 	function formatUSD(usd: number): string {
-		if (usd >= 1e9) return '$' + (usd / 1e9).toFixed(1) + 'B';
-		if (usd >= 1e6) return '$' + (usd / 1e6).toFixed(1) + 'M';
-		return '$' + (usd / 1e3).toFixed(0) + 'K';
+		return formatCurrency(usd, { compact: true, locale: $language });
 	}
 </script>
 
-<Panel id="whales" title="Whale Watch" {count} {loading} {error}>
+<Panel id="whales" title={$ui.panels.whales.title} {count} {loading} {error}>
 	{#if whales.length === 0 && !loading && !error}
-		<div class="empty-state">No whale transactions detected</div>
+		<div class="empty-state">{$ui.panels.whales.empty}</div>
 	{:else}
 		<div class="whale-list">
 			{#each whales as whale, i (whale.hash + i)}

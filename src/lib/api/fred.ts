@@ -215,6 +215,78 @@ export async function fetchFedIndicators(): Promise<FedIndicators> {
 }
 
 // ============================================================================
+// Fed Balance Sheet (Money Printer)
+// ============================================================================
+
+export interface FedBalanceSheet {
+	value: number; // Current total assets in Trillions USD
+	change: number; // Week-over-week change in Trillions
+	changePercent: number; // Week-over-week percent change
+	percentOfMax: number; // Relative to historical max in fetched dataset (0-100)
+}
+
+/**
+ * Fetch Federal Reserve Total Assets (Balance Sheet)
+ * Series: WALCL — Assets: Total Assets, Millions of Dollars, Weekly
+ * Fetches ~260 observations (~5 years) to compute the historical max.
+ */
+export async function fetchFedBalanceSheet(): Promise<FedBalanceSheet | null> {
+	if (!isFredConfigured()) {
+		return null;
+	}
+
+	try {
+		logger.log('FRED API', 'Fetching Fed balance sheet (WALCL)');
+		// WALCL is in Millions of Dollars, weekly
+		const url = `${FRED_BASE_URL}/series/observations?series_id=WALCL&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=260`;
+		const response = await fetch(url);
+
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+		}
+
+		const data: FredSeriesResponse = await response.json();
+		const observations = data.observations || [];
+
+		if (observations.length < 2) {
+			return null;
+		}
+
+		// Convert millions → trillions
+		const toTrillions = (obs: FredObservation | undefined): number | null => {
+			const raw = parseValue(obs);
+			return raw !== null ? raw / 1_000_000 : null;
+		};
+
+		const current = toTrillions(observations[0]);
+		const previous = toTrillions(observations[1]);
+
+		if (current === null || previous === null) {
+			return null;
+		}
+
+		const allValues = observations
+			.map((o) => toTrillions(o))
+			.filter((v): v is number => v !== null);
+		const maxValue = Math.max(...allValues);
+
+		const change = current - previous;
+		const changePercent = previous !== 0 ? (change / previous) * 100 : 0;
+		const percentOfMax = maxValue > 0 ? (current / maxValue) * 100 : 0;
+
+		return {
+			value: Math.round(current * 100) / 100,
+			change: Math.round(change * 10000) / 10000,
+			changePercent: Math.round(changePercent * 100) / 100,
+			percentOfMax: Math.round(percentOfMax * 10) / 10
+		};
+	} catch (error) {
+		logger.error('FRED API', 'Error fetching balance sheet:', error);
+		return null;
+	}
+}
+
+// ============================================================================
 // Fed RSS News Fetching
 // ============================================================================
 

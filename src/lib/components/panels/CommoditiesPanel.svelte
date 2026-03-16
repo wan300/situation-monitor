@@ -1,20 +1,21 @@
 <script lang="ts">
 	import { Panel, MarketItem } from '$lib/components/common';
-	import { commodities, vix } from '$lib/stores';
+	import { commodities, vix, ui } from '$lib/stores';
 
 	const items = $derived($commodities.items);
 	const loading = $derived($commodities.loading);
 	const error = $derived($commodities.error);
 
 	// VIX status for panel header
-	const vixStatus = $derived(getVixStatus($vix?.price));
+	const vixStatusKey = $derived(getVixStatusKey($vix?.price));
+	const vixStatus = $derived(vixStatusKey ? $ui.panels.commodities.status[vixStatusKey] : '');
 	const vixClass = $derived(getVixClass($vix?.price));
 
-	function getVixStatus(level: number | undefined): string {
-		if (level === undefined) return '';
-		if (level >= 30) return 'HIGH FEAR';
-		if (level >= 20) return 'ELEVATED';
-		return 'LOW';
+	function getVixStatusKey(level: number | undefined): 'highFear' | 'elevated' | 'low' | null {
+		if (level === undefined) return null;
+		if (level >= 30) return 'highFear';
+		if (level >= 20) return 'elevated';
+		return 'low';
 	}
 
 	function getVixClass(level: number | undefined): string {
@@ -27,14 +28,14 @@
 
 <Panel
 	id="commodities"
-	title="Commodities / VIX"
+	title={$ui.panels.commodities.title}
 	status={vixStatus}
 	statusClass={vixClass}
 	{loading}
 	{error}
 >
 	{#if items.length === 0 && !loading && !error}
-		<div class="empty-state">No commodity data available</div>
+		<div class="empty-state">{$ui.panels.commodities.empty}</div>
 	{:else}
 		<div class="commodities-list">
 			{#each items as item (item.symbol)}

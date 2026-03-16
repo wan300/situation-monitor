@@ -77,3 +77,16 @@ export {
 	type FedIndicatorsState,
 	type FedNewsState
 } from './fed';
+
+// I18n store
+export {
+	language,
+	ui,
+	setLanguage,
+	toggleLanguage,
+	LANGUAGE_OPTIONS,
+	type Language
+} from './i18n';
+
+// Hotspots store (dynamic map hotspots driven by news + LLM)
+export { hotspotsStore, type HotspotsState } from './hotspots';

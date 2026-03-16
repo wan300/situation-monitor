@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Panel } from '$lib/components/common';
+	import { formatCurrency } from '$lib/utils';
+	import { language, ui } from '$lib/stores';
 
 	interface Contract {
 		agency: string;
@@ -19,16 +21,13 @@
 	const count = $derived(contracts.length);
 
 	function formatValue(v: number): string {
-		if (v >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
-		if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
-		if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
-		return '$' + v.toFixed(0);
+		return formatCurrency(v, { compact: true, locale: $language, decimals: 0 });
 	}
 </script>
 
-<Panel id="contracts" title="Gov Contracts" {count} {loading} {error}>
+<Panel id="contracts" title={$ui.panels.contracts.title} {count} {loading} {error}>
 	{#if contracts.length === 0 && !loading && !error}
-		<div class="empty-state">No contracts available</div>
+		<div class="empty-state">{$ui.panels.contracts.empty}</div>
 	{:else}
 		<div class="contracts-list">
 			{#each contracts as contract, i (contract.vendor + i)}

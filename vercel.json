@@ -1,5 +1,9 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "build",
-  "framework": "sveltekit"
+  "framework": "sveltekit",
+  "crons": [
+    {
+      "path": "/api/cron/news-refresh",
+      "schedule": "0 * * * *"
+    }
+  ]
 }

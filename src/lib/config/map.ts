@@ -1,17 +1,35 @@
 // Map configuration - hotspots, conflict zones, and strategic locations
 
+export interface LocalizedText {
+	'zh-CN': string;
+	'en-US': string;
+}
+
 export interface Hotspot {
+	id?: string;
 	name: string;
+	nameLocalized?: LocalizedText;
 	lat: number;
 	lon: number;
 	level: 'critical' | 'high' | 'elevated' | 'low';
 	desc: string;
+	summary?: LocalizedText;
+	score?: number;
+	mentions?: number;
+	alertMentions?: number;
+	recentMentions?: number;
+	sourceDiversity?: number;
+	country?: string;
+	lastSeenAt?: number;
+	/** Keywords used to match this hotspot against news headlines for dynamic scoring */
+	keywords?: string[];
 }
 
 export interface ConflictZone {
 	name: string;
 	coords: [number, number][];
 	color: string;
+	desc: string;
 }
 
 export interface Chokepoint {
@@ -72,112 +90,128 @@ export const HOTSPOTS: Hotspot[] = [
 		lat: 38.9,
 		lon: -77.0,
 		level: 'low',
-		desc: 'Washington DC — US political center, White House, Pentagon, Capitol'
+		desc: 'Washington DC — US political center, White House, Pentagon, Capitol',
+		keywords: ['washington', 'white house', 'pentagon', 'congress', 'senate', 'trump', 'biden', 'federal government', 'capitol', 'cia', 'nsa', 'us president']
 	},
 	{
 		name: 'Moscow',
 		lat: 55.75,
 		lon: 37.6,
 		level: 'elevated',
-		desc: 'Moscow — Kremlin, Russian military command, sanctions hub'
+		desc: 'Moscow — Kremlin, Russian military command, sanctions hub',
+		keywords: ['russia', 'moscow', 'kremlin', 'putin', 'russian', 'fsb', 'svr', 'russian military', 'russian Federation', 'lavrov']
 	},
 	{
 		name: 'Beijing',
 		lat: 39.9,
 		lon: 116.4,
 		level: 'elevated',
-		desc: 'Beijing — CCP headquarters, US-China tensions, tech rivalry'
+		desc: 'Beijing — CCP headquarters, US-China tensions, tech rivalry',
+		keywords: ['china', 'beijing', 'xi jinping', 'ccp', 'pla', 'chinese military', 'chinese government', 'politburo', 'us-china', 'bri', 'belt and road']
 	},
 	{
 		name: 'Kyiv',
 		lat: 50.45,
 		lon: 30.5,
 		level: 'high',
-		desc: 'Kyiv — Active conflict zone, Russian invasion ongoing'
+		desc: 'Kyiv — Active conflict zone, Russian invasion ongoing',
+		keywords: ['ukraine', 'kyiv', 'zelensky', 'ukrainian', 'donetsk', 'kharkiv', 'odesa', 'zaporizhzhia', 'mariupol', 'dnipro', 'invasion', 'war in ukraine']
 	},
 	{
 		name: 'Taipei',
 		lat: 25.03,
 		lon: 121.5,
 		level: 'elevated',
-		desc: 'Taipei — Taiwan Strait tensions, TSMC, China threat'
+		desc: 'Taipei — Taiwan Strait tensions, TSMC, China threat',
+		keywords: ['taiwan', 'taipei', 'tsmc', 'taiwan strait', 'taiwanese', 'pla navy', 'cross-strait', 'reunification', 'semiconductor']
 	},
 	{
 		name: 'Tehran',
 		lat: 35.7,
 		lon: 51.4,
 		level: 'critical',
-		desc: 'Tehran — ACTIVE UPRISING: 200+ cities, 26 provinces. Revolution protests, regime instability, nuclear program'
+		desc: 'Tehran — ACTIVE UPRISING: 200+ cities, 26 provinces. Revolution protests, regime instability, nuclear program',
+		keywords: ['iran', 'tehran', 'irgc', 'ayatollah', 'khamenei', 'iranian', 'nuclear program', 'uranium enrichment', 'persian', 'raisi', 'hassan nasrallah', 'iranian protests']
 	},
 	{
 		name: 'Tel Aviv',
 		lat: 32.07,
 		lon: 34.78,
 		level: 'high',
-		desc: 'Tel Aviv — Israel-Gaza conflict, active military operations'
+		desc: 'Tel Aviv — Israel-Gaza conflict, active military operations',
+		keywords: ['israel', 'gaza', 'tel aviv', 'idf', 'hamas', 'netanyahu', 'west bank', 'hezbollah', 'iron dome', 'israeli', 'palestinian', 'jerusalem']
 	},
 	{
 		name: 'London',
 		lat: 51.5,
 		lon: -0.12,
 		level: 'low',
-		desc: 'London — Financial center, Five Eyes, NATO ally'
+		desc: 'London — Financial center, Five Eyes, NATO ally',
+		keywords: ['uk', 'britain', 'london', 'gchq', 'mi6', 'british government', 'nato ally', 'five eyes', 'sunak', 'starmer', 'bank of england']
 	},
 	{
 		name: 'Brussels',
 		lat: 50.85,
 		lon: 4.35,
 		level: 'low',
-		desc: 'Brussels — EU/NATO headquarters, European policy'
+		desc: 'Brussels — EU/NATO headquarters, European policy',
+		keywords: ['eu', 'european union', 'nato', 'brussels', 'european commission', 'nato headquarters', 'european parliament', 'von der leyen', 'european council']
 	},
 	{
 		name: 'Pyongyang',
 		lat: 39.03,
 		lon: 125.75,
 		level: 'elevated',
-		desc: 'Pyongyang — North Korea nuclear threat, missile tests'
+		desc: 'Pyongyang — North Korea nuclear threat, missile tests',
+		keywords: ['north korea', 'pyongyang', 'kim jong un', 'dprk', 'icbm', 'north korean', 'missile test', 'nuclear test', 'north korean military']
 	},
 	{
 		name: 'Riyadh',
 		lat: 24.7,
 		lon: 46.7,
 		level: 'elevated',
-		desc: 'Riyadh — Saudi oil, OPEC+, Yemen conflict, regional power'
+		desc: 'Riyadh — Saudi oil, OPEC+, Yemen conflict, regional power',
+		keywords: ['saudi', 'riyadh', 'opec', 'saudi aramco', 'bin salman', 'mbs', 'saudi arabia', 'gulf', 'aramco', 'oil production']
 	},
 	{
 		name: 'Delhi',
 		lat: 28.6,
 		lon: 77.2,
 		level: 'low',
-		desc: 'Delhi — India rising power, China border tensions'
+		desc: 'Delhi — India rising power, China border tensions',
+		keywords: ['india', 'delhi', 'modi', 'indian government', 'india-china', 'lac', 'line of actual control', 'indo-pacific', 'indian military', 'kashmir']
 	},
 	{
 		name: 'Singapore',
 		lat: 1.35,
 		lon: 103.82,
 		level: 'low',
-		desc: 'Singapore — Shipping chokepoint, Asian finance hub'
+		desc: 'Singapore — Shipping chokepoint, Asian finance hub',
+		keywords: ['singapore', 'strait of malacca', 'asian finance', 'usd sgd', 'singapore dollar', 'asean']
 	},
 	{
 		name: 'Tokyo',
 		lat: 35.68,
 		lon: 139.76,
 		level: 'low',
-		desc: 'Tokyo — US ally, regional security, economic power'
+		desc: 'Tokyo — US ally, regional security, economic power',
+		keywords: ['japan', 'tokyo', 'japanese government', 'jsdf', 'kishida', 'japan-us', 'japan-china', 'japanese yen', 'boj', 'bank of japan', 'japanese military']
 	},
 	{
 		name: 'Caracas',
 		lat: 10.5,
 		lon: -66.9,
 		level: 'high',
-		desc: 'Caracas — Venezuela crisis, Maduro regime, US sanctions, humanitarian emergency'
+		desc: 'Caracas — Venezuela crisis, Maduro regime, US sanctions, humanitarian emergency',
+		keywords: ['venezuela', 'caracas', 'maduro', 'venezuelan', 'pdvsa', 'venezuelan opposition', 'us sanctions venezuela', 'guaido', 'migrant crisis venezuela']
 	},
 	{
 		name: 'Nuuk',
 		lat: 64.18,
 		lon: -51.72,
 		level: 'elevated',
-		desc: 'Nuuk — Greenland, US acquisition interest, Arctic strategy, Denmark tensions'
+		desc: 'Nuuk — Greenland, US acquisition interest, Arctic strategy, Denmark tensions',
+		keywords: ['greenland', 'nuuk', 'arctic', 'denmark', 'danish', 'trump greenland', 'arctic sovereignty', 'northwest passage', 'arctic strategy']
 	}
 ];
 
@@ -191,7 +225,8 @@ export const CONFLICT_ZONES: ConflictZone[] = [
 			[30, 45],
 			[30, 52]
 		],
-		color: '#ff4444'
+		color: '#ff4444',
+		desc: 'Ukraine conflict zone — front-line combat and infrastructure risk'
 	},
 	{
 		name: 'Gaza',
@@ -202,7 +237,8 @@ export const CONFLICT_ZONES: ConflictZone[] = [
 			[34, 31],
 			[34, 32]
 		],
-		color: '#ff4444'
+		color: '#ff4444',
+		desc: 'Gaza conflict zone — persistent urban warfare and humanitarian pressure'
 	},
 	{
 		name: 'Taiwan Strait',
@@ -213,7 +249,8 @@ export const CONFLICT_ZONES: ConflictZone[] = [
 			[117, 22],
 			[117, 28]
 		],
-		color: '#ffaa00'
+		color: '#ffaa00',
+		desc: 'Taiwan Strait tension zone — military signaling and maritime pressure'
 	},
 	{
 		name: 'Yemen',
@@ -224,7 +261,8 @@ export const CONFLICT_ZONES: ConflictZone[] = [
 			[42, 12],
 			[42, 19]
 		],
-		color: '#ff6644'
+		color: '#ff6644',
+		desc: 'Yemen conflict zone — regional proxy conflict and shipping disruption risk'
 	},
 	{
 		name: 'Sudan',
@@ -235,7 +273,8 @@ export const CONFLICT_ZONES: ConflictZone[] = [
 			[22, 8],
 			[22, 23]
 		],
-		color: '#ff6644'
+		color: '#ff6644',
+		desc: 'Sudan conflict zone — civil war conditions and displacement pressure'
 	},
 	{
 		name: 'Myanmar',
@@ -246,7 +285,8 @@ export const CONFLICT_ZONES: ConflictZone[] = [
 			[92, 10],
 			[92, 28]
 		],
-		color: '#ff8844'
+		color: '#ff8844',
+		desc: 'Myanmar conflict zone — internal armed clashes and governance instability'
 	}
 ];
 

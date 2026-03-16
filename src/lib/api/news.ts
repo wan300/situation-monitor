@@ -2,10 +2,37 @@
  * News API - Fetch news from GDELT and other sources
  */
 
+import { base } from '$app/paths';
 import { FEEDS } from '$lib/config/feeds';
 import type { NewsItem, NewsCategory } from '$lib/types';
 import { containsAlertKeyword, detectRegion, detectTopics } from '$lib/config/keywords';
 import { fetchWithProxy, API_DELAYS, logger } from '$lib/config/api';
+
+export interface NewsSnapshotResponse {
+	categories: Record<NewsCategory, NewsItem[]>;
+	lastIngestAt: number | null;
+	totalItems: number;
+}
+
+/**
+ * Fetch persisted news snapshot from backend
+ */
+export async function fetchNewsSnapshot(limit = 20): Promise<NewsSnapshotResponse> {
+	const normalizedLimit = Number.isFinite(limit) ? Math.min(Math.max(Math.floor(limit), 1), 50) : 20;
+	const url = `${base}/api/news/snapshot?limit=${normalizedLimit}`;
+
+	const response = await fetch(url, {
+		headers: {
+			Accept: 'application/json'
+		}
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch persisted news snapshot: HTTP ${response.status}`);
+	}
+
+	return (await response.json()) as NewsSnapshotResponse;
+}
 
 /**
  * Simple hash function to generate unique IDs from URLs

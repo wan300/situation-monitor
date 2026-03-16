@@ -17,6 +17,7 @@
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.49.0",
+		"@sveltejs/adapter-node": "^5.5.4",
 		"@sveltejs/adapter-static": "^3.0.0",
 		"@sveltejs/kit": "^2.0.0",
 		"@sveltejs/vite-plugin-svelte": "^5.0.0",
@@ -44,6 +45,8 @@
 		"vitest": "^2.0.0"
 	},
 	"dependencies": {
+		"@libsql/client": "^0.17.0",
+		"@sveltejs/adapter-vercel": "^6.3.3",
 		"d3": "^7.9.0",
 		"topojson-client": "^3.1.0"
 	}

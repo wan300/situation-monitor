@@ -2,7 +2,7 @@
  * API barrel exports
  */
 
-export { fetchCategoryNews, fetchAllNews } from './news';
+export { fetchCategoryNews, fetchAllNews, fetchNewsSnapshot } from './news';
 export {
 	fetchCryptoPrices,
 	fetchIndices,
@@ -13,5 +13,11 @@ export {
 export { fetchPolymarket, fetchWhaleTransactions, fetchGovContracts, fetchLayoffs } from './misc';
 export type { Prediction, WhaleTransaction, Contract, Layoff } from './misc';
 export { fetchWorldLeaders } from './leaders';
-export { fetchFedIndicators, fetchFedNews, isFredConfigured } from './fred';
-export type { FedIndicators, EconomicIndicator, FedNewsItem, FedNewsType } from './fred';
+export { fetchFedIndicators, fetchFedNews, fetchFedBalanceSheet, isFredConfigured } from './fred';
+export type {
+	FedIndicators,
+	EconomicIndicator,
+	FedNewsItem,
+	FedNewsType,
+	FedBalanceSheet
+} from './fred';

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { ui } from '$lib/stores';
 
 	interface Props {
 		open: boolean;
@@ -37,7 +38,7 @@
 				{#if header}
 					{@render header()}
 				{/if}
-				<button class="modal-close" onclick={onClose} aria-label="Close">×</button>
+				<button class="modal-close" onclick={onClose} aria-label={$ui.common.close}>×</button>
 			</div>
 
 			<div class="modal-content">

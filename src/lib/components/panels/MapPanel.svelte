@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Panel } from '$lib/components/common';
+	import { language, ui, hotspotsStore } from '$lib/stores';
 	import {
-		HOTSPOTS,
 		CONFLICT_ZONES,
 		CHOKEPOINTS,
 		CABLE_LANDINGS,
@@ -14,7 +14,9 @@
 		WEATHER_CODES
 	} from '$lib/config/map';
 	import { CACHE_TTLS } from '$lib/config/api';
+	import type { Hotspot } from '$lib/config/map';
 	import type { CustomMonitor } from '$lib/types';
+	import { translateMapText } from '$lib/i18n';
 
 	interface Props {
 		monitors?: CustomMonitor[];
@@ -23,6 +25,11 @@
 	}
 
 	let { monitors = [], loading = false, error = null }: Props = $props();
+
+	// Dynamic hotspots from store
+	let currentHotspots = $derived($hotspotsStore.items);
+	let renderedLanguage = $state<string | null>(null);
+	let mapReady = $state(false);
 
 	let mapContainer: HTMLDivElement;
 	// D3 objects - initialized in initMap, null before initialization
@@ -70,16 +77,26 @@
 		dataCache[key] = { data, timestamp: Date.now() };
 	}
 
+	function getHotspotDisplayName(hotspot: Hotspot): string {
+		return hotspot.nameLocalized?.[$language] ?? translateMapText(hotspot.name, $language);
+	}
+
+	function getHotspotSummary(hotspot: Hotspot): string {
+		return hotspot.summary?.[$language] ?? translateMapText(hotspot.desc, $language);
+	}
+
 	// Get local time at longitude
-	function getLocalTime(lon: number): string {
+	function getLocalTime(lon: number, locale: string): string {
 		const now = new Date();
 		const utcHours = now.getUTCHours();
 		const utcMinutes = now.getUTCMinutes();
 		const offsetHours = Math.round(lon / 15);
-		let localHours = (utcHours + offsetHours + 24) % 24;
-		const ampm = localHours >= 12 ? 'PM' : 'AM';
-		localHours = localHours % 12 || 12;
-		return `${localHours}:${utcMinutes.toString().padStart(2, '0')} ${ampm}`;
+		const displayDate = new Date(Date.UTC(2024, 0, 1, utcHours + offsetHours, utcMinutes));
+		return displayDate.toLocaleTimeString(locale, {
+			hour: 'numeric',
+			minute: '2-digit',
+			timeZone: 'UTC'
+		});
 	}
 
 	// Weather result type
@@ -183,30 +200,40 @@
 	}
 
 	// Build enhanced tooltip with weather
-	async function showEnhancedTooltip(
-		event: MouseEvent,
-		_name: string,
-		lat: number,
-		lon: number,
-		desc: string,
-		color: string
-	): Promise<void> {
-		const localTime = getLocalTime(lon);
-		const lines = [`🕐 Local: ${localTime}`];
-		showTooltip(event, desc, color, lines);
+	async function showEnhancedTooltip(event: MouseEvent, hotspot: Hotspot, color: string): Promise<void> {
+		const localTime = getLocalTime(hotspot.lon, $language);
+		const lines = [$ui.panels.map.localTime(localTime)];
+		showTooltip(event, getHotspotSummary(hotspot), color, lines);
 
 		// Fetch weather asynchronously
-		const weather = await getWeather(lat, lon);
+		const weather = await getWeather(hotspot.lat, hotspot.lon);
 		if (weather && tooltipVisible) {
 			tooltipContent = {
-				title: desc,
+				title: getHotspotSummary(hotspot),
 				color,
 				lines: [
-					`🕐 Local: ${localTime}`,
-					`${weather.condition} ${weather.temp}°F, ${weather.wind}mph`
+					$ui.panels.map.localTime(localTime),
+					$ui.panels.map.weatherLine(
+						translateMapText(weather.condition, $language),
+						weather.temp,
+						weather.wind
+					)
 				]
 			};
 		}
+	}
+
+	async function rebuildMap(): Promise<void> {
+		if (!mapContainer || !d3Module) return;
+		const svgEl = mapContainer.querySelector('svg');
+		if (!svgEl) return;
+
+		d3Module.select(svgEl).selectAll('*').remove();
+		mapGroup = null;
+		projection = null;
+		path = null;
+		zoom = null;
+		await initMap();
 	}
 
 	// Initialize map
@@ -306,7 +333,7 @@
 						.attr('font-family', 'monospace')
 						.attr('text-anchor', 'middle')
 						.attr('opacity', 0.6)
-						.text(o.name);
+						.text(translateMapText(o.name, $language));
 				}
 			});
 
@@ -321,7 +348,7 @@
 
 			// Draw conflict zones
 			CONFLICT_ZONES.forEach((zone) => {
-				mapGroup
+				const zonePath = mapGroup
 					.append('path')
 					.datum({ type: 'Polygon', coordinates: [zone.coords] } as GeoJSON.Polygon)
 					.attr('d', path as unknown as string)
@@ -330,6 +357,34 @@
 					.attr('stroke', zone.color)
 					.attr('stroke-width', 0.5)
 					.attr('stroke-opacity', 0.4);
+
+				zonePath
+					.attr('class', 'hotspot-hit')
+					.on('mouseenter', (event: MouseEvent) =>
+						showTooltip(event, translateMapText(zone.name, $language), zone.color, [
+							translateMapText(zone.desc, $language)
+						])
+					)
+					.on('mousemove', moveTooltip)
+					.on('mouseleave', hideTooltip);
+
+				const centerLon =
+					zone.coords.reduce((sum, point) => sum + point[0], 0) / Math.max(zone.coords.length, 1);
+				const centerLat =
+					zone.coords.reduce((sum, point) => sum + point[1], 0) / Math.max(zone.coords.length, 1);
+				const [labelX, labelY] = projection([centerLon, centerLat]) || [0, 0];
+				if (labelX && labelY) {
+					mapGroup
+						.append('text')
+						.attr('x', labelX)
+						.attr('y', labelY)
+						.attr('fill', zone.color)
+						.attr('font-size', '8px')
+						.attr('font-family', 'monospace')
+						.attr('text-anchor', 'middle')
+						.attr('opacity', 0.75)
+						.text(translateMapText(zone.name, $language));
+				}
 			});
 
 			// Draw chokepoints
@@ -352,7 +407,7 @@
 						.attr('fill', '#00aaff')
 						.attr('font-size', '7px')
 						.attr('font-family', 'monospace')
-						.text(cp.name);
+						.text(translateMapText(cp.name, $language));
 					mapGroup
 						.append('circle')
 						.attr('cx', x)
@@ -360,7 +415,9 @@
 						.attr('r', 10)
 						.attr('fill', 'transparent')
 						.attr('class', 'hotspot-hit')
-						.on('mouseenter', (event: MouseEvent) => showTooltip(event, `⬥ ${cp.desc}`, '#00aaff'))
+						.on('mouseenter', (event: MouseEvent) =>
+							showTooltip(event, `⬥ ${translateMapText(cp.desc, $language)}`, '#00aaff')
+						)
 						.on('mousemove', moveTooltip)
 						.on('mouseleave', hideTooltip);
 				}
@@ -385,7 +442,9 @@
 						.attr('r', 10)
 						.attr('fill', 'transparent')
 						.attr('class', 'hotspot-hit')
-						.on('mouseenter', (event: MouseEvent) => showTooltip(event, `◎ ${cl.desc}`, '#aa44ff'))
+						.on('mouseenter', (event: MouseEvent) =>
+							showTooltip(event, `◎ ${translateMapText(cl.desc, $language)}`, '#aa44ff')
+						)
 						.on('mousemove', moveTooltip)
 						.on('mouseleave', hideTooltip);
 				}
@@ -417,7 +476,9 @@
 						.attr('r', 10)
 						.attr('fill', 'transparent')
 						.attr('class', 'hotspot-hit')
-						.on('mouseenter', (event: MouseEvent) => showTooltip(event, `☢ ${ns.desc}`, '#ffff00'))
+						.on('mouseenter', (event: MouseEvent) =>
+							showTooltip(event, `☢ ${translateMapText(ns.desc, $language)}`, '#ffff00')
+						)
 						.on('mousemove', moveTooltip)
 						.on('mouseleave', hideTooltip);
 				}
@@ -436,58 +497,75 @@
 						.attr('r', 10)
 						.attr('fill', 'transparent')
 						.attr('class', 'hotspot-hit')
-						.on('mouseenter', (event: MouseEvent) => showTooltip(event, `★ ${mb.desc}`, '#ff00ff'))
-						.on('mousemove', moveTooltip)
-						.on('mouseleave', hideTooltip);
-				}
-			});
-
-			// Draw hotspots
-			HOTSPOTS.forEach((h) => {
-				const [x, y] = projection([h.lon, h.lat]) || [0, 0];
-				if (x && y) {
-					const color = THREAT_COLORS[h.level];
-					// Pulsing circle
-					mapGroup
-						.append('circle')
-						.attr('cx', x)
-						.attr('cy', y)
-						.attr('r', 6)
-						.attr('fill', color)
-						.attr('fill-opacity', 0.3)
-						.attr('class', 'pulse');
-					// Inner dot
-					mapGroup.append('circle').attr('cx', x).attr('cy', y).attr('r', 3).attr('fill', color);
-					// Label
-					mapGroup
-						.append('text')
-						.attr('x', x + 8)
-						.attr('y', y + 3)
-						.attr('fill', color)
-						.attr('font-size', '8px')
-						.attr('font-family', 'monospace')
-						.text(h.name);
-					// Hit area
-					mapGroup
-						.append('circle')
-						.attr('cx', x)
-						.attr('cy', y)
-						.attr('r', 12)
-						.attr('fill', 'transparent')
-						.attr('class', 'hotspot-hit')
 						.on('mouseenter', (event: MouseEvent) =>
-							showEnhancedTooltip(event, h.name, h.lat, h.lon, h.desc, color)
+							showTooltip(event, `★ ${translateMapText(mb.desc, $language)}`, '#ff00ff')
 						)
 						.on('mousemove', moveTooltip)
 						.on('mouseleave', hideTooltip);
 				}
 			});
 
+			// Draw hotspots (initial draw using current store value)
+			drawHotspots(currentHotspots);
+
 			// Draw custom monitors with locations
 			drawMonitors();
+			renderedLanguage = $language;
+			mapReady = true;
 		} catch (err) {
 			console.error('Failed to load map data:', err);
 		}
+	}
+
+	// Draw hotspot markers — extracted so it can be called reactively
+	function drawHotspots(hotspots: Hotspot[]): void {
+		if (!mapGroup || !projection) return;
+		mapGroup.selectAll('.hotspot-group').remove();
+
+		hotspots.forEach((h) => {
+			const [x, y] = projection([h.lon, h.lat]) || [0, 0];
+			if (x && y) {
+				const color = THREAT_COLORS[h.level];
+				// Pulsing circle
+				mapGroup
+					.append('circle')
+					.attr('class', 'hotspot-group pulse')
+					.attr('cx', x)
+					.attr('cy', y)
+					.attr('r', 6)
+					.attr('fill', color)
+					.attr('fill-opacity', 0.3);
+				// Inner dot
+				mapGroup
+					.append('circle')
+					.attr('class', 'hotspot-group')
+					.attr('cx', x)
+					.attr('cy', y)
+					.attr('r', 3)
+					.attr('fill', color);
+				// Label
+				mapGroup
+					.append('text')
+					.attr('class', 'hotspot-group')
+					.attr('x', x + 8)
+					.attr('y', y + 3)
+					.attr('fill', color)
+					.attr('font-size', '8px')
+					.attr('font-family', 'monospace')
+					.text(getHotspotDisplayName(h));
+				// Hit area
+				mapGroup
+					.append('circle')
+					.attr('class', 'hotspot-group hotspot-hit')
+					.attr('cx', x)
+					.attr('cy', y)
+					.attr('r', 12)
+					.attr('fill', 'transparent')
+					.on('mouseenter', (event: MouseEvent) => showEnhancedTooltip(event, h, color))
+					.on('mousemove', moveTooltip)
+					.on('mouseleave', hideTooltip);
+			}
+		});
 	}
 
 	// Draw custom monitor locations
@@ -570,12 +648,39 @@
 		}
 	});
 
+	// Reactively redraw hotspots when the store updates
+	$effect(() => {
+		const hotspots = currentHotspots;
+		if (hotspots && mapGroup && projection) {
+			drawHotspots(hotspots);
+		}
+	});
+
+	$effect(() => {
+		const currentLanguage = $language;
+		if (!mapReady || !mapGroup || renderedLanguage === null) {
+			return;
+		}
+		if (renderedLanguage !== currentLanguage) {
+			renderedLanguage = currentLanguage;
+			void rebuildMap();
+		}
+	});
+
 	onMount(() => {
 		initMap();
 	});
 </script>
 
-<Panel id="map" title="Global Situation" {loading} {error}>
+<Panel id="map" title={$ui.panels.map.title} {loading} {error}>
+	{#if $hotspotsStore.llmEnriched}
+		<div class="ai-badge">{$ui.panels.map.aiSummary($hotspotsStore.matchedCount)}</div>
+	{:else if $hotspotsStore.matchedCount > 0}
+		<div class="ai-badge algo">{$ui.panels.map.algoSummary($hotspotsStore.matchedCount)}</div>
+	{/if}
+	{#if !$hotspotsStore.loading && currentHotspots.length === 0}
+		<div class="hotspot-empty">{$ui.panels.map.emptyHotspots}</div>
+	{/if}
 	<div class="map-container" bind:this={mapContainer}>
 		<svg class="map-svg"></svg>
 		{#if tooltipVisible && tooltipContent}
@@ -590,19 +695,34 @@
 			</div>
 		{/if}
 		<div class="zoom-controls">
-			<button class="zoom-btn" onclick={zoomIn} title="Zoom in">+</button>
-			<button class="zoom-btn" onclick={zoomOut} title="Zoom out">−</button>
-			<button class="zoom-btn" onclick={resetZoom} title="Reset">⟲</button>
+			<button class="zoom-btn" onclick={zoomIn} title={$ui.common.zoomIn}>+</button>
+			<button class="zoom-btn" onclick={zoomOut} title={$ui.common.zoomOut}>−</button>
+			<button class="zoom-btn" onclick={resetZoom} title={$ui.common.reset}>⟲</button>
 		</div>
 		<div class="map-legend">
 			<div class="legend-item">
-				<span class="legend-dot high"></span> High
+				<span class="legend-dot high"></span> {$ui.panels.map.legendHigh}
 			</div>
 			<div class="legend-item">
-				<span class="legend-dot elevated"></span> Elevated
+				<span class="legend-dot elevated"></span> {$ui.panels.map.legendElevated}
 			</div>
 			<div class="legend-item">
-				<span class="legend-dot low"></span> Low
+				<span class="legend-dot low"></span> {$ui.panels.map.legendLow}
+			</div>
+			<div class="legend-item muted">
+				<span class="legend-symbol conflict"></span> {$ui.panels.map.legendConflict}
+			</div>
+			<div class="legend-item muted">
+				<span class="legend-symbol chokepoint"></span> {$ui.panels.map.legendChokepoint}
+			</div>
+			<div class="legend-item muted">
+				<span class="legend-symbol cable"></span> {$ui.panels.map.legendCable}
+			</div>
+			<div class="legend-item muted">
+				<span class="legend-symbol nuclear"></span> {$ui.panels.map.legendNuclear}
+			</div>
+			<div class="legend-item muted">
+				<span class="legend-symbol military"></span> {$ui.panels.map.legendMilitary}
 			</div>
 		</div>
 	</div>
@@ -616,6 +736,31 @@
 		background: #0a0f0d;
 		border-radius: 4px;
 		overflow: hidden;
+	}
+
+	.ai-badge {
+		display: inline-block;
+		margin-bottom: 0.4rem;
+		padding: 0.15rem 0.5rem;
+		font-size: 0.6rem;
+		font-family: monospace;
+		background: rgba(0, 255, 136, 0.12);
+		color: #00ff88;
+		border: 1px solid rgba(0, 255, 136, 0.3);
+		border-radius: 3px;
+	}
+
+	.ai-badge.algo {
+		background: rgba(255, 204, 0, 0.1);
+		color: #ffcc00;
+		border-color: rgba(255, 204, 0, 0.3);
+	}
+
+	.hotspot-empty {
+		margin-bottom: 0.4rem;
+		font-size: 0.65rem;
+		color: #8da89f;
+		font-family: monospace;
 	}
 
 	.map-svg {
@@ -688,6 +833,10 @@
 		color: #888;
 	}
 
+	.legend-item.muted {
+		opacity: 0.85;
+	}
+
 	.legend-dot {
 		width: 8px;
 		height: 8px;
@@ -704,6 +853,37 @@
 
 	.legend-dot.low {
 		background: #00ff88;
+	}
+
+	.legend-symbol {
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+	}
+
+	.legend-symbol.conflict {
+		background: #ff6644;
+		opacity: 0.45;
+	}
+
+	.legend-symbol.chokepoint {
+		background: #00aaff;
+		transform: rotate(45deg);
+	}
+
+	.legend-symbol.cable {
+		border-radius: 50%;
+		border: 1.5px solid #aa44ff;
+	}
+
+	.legend-symbol.nuclear {
+		border-radius: 50%;
+		background: #ffff00;
+	}
+
+	.legend-symbol.military {
+		background: #ff00ff;
+		clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
 	}
 
 	/* Pulse animation for hotspots */

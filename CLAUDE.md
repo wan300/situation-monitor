@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 项目架构说明
+
+**重要：这是一个 SvelteKit 2.0 全栈应用，不是前后端分离架构**
+
+- **前端层**：Svelte 5 组件、客户端路由、交互界面（`src/lib/components/`, `src/routes/*.svelte`）
+- **后端层**：SvelteKit 服务器路由、API 端点、数据处理（`src/routes/api/**/*.ts`）
+- **启动方式**：单个 `npm run dev` 命令同时启动前端开发服务器和后端 API 服务
+  - 前端：Vite 开发服务器（热模块替换）
+  - 后端：SvelteKit 集成服务器
+  - 访问：http://localhost:5173/
+
 ## Development Workflow
 
 When working on a new feature:
@@ -12,16 +23,23 @@ When working on a new feature:
 ## Build & Development Commands
 
 ```bash
-npm run dev          # Start dev server (localhost:5173)
-npm run build        # Build to /build directory
-npm run preview      # Preview production build (localhost:4173)
-npm run check        # TypeScript type checking
-npm run check:watch  # Type checking in watch mode
-npm run test         # Run Vitest in watch mode
-npm run test:unit    # Run unit tests once
-npm run test:e2e     # Run Playwright E2E tests (requires preview server)
-npm run lint         # ESLint + Prettier check
-npm run format       # Auto-format with Prettier
+# 启动开发环境（包含前端 + 后端集成）
+npm run dev          # 启动 Vite 开发服务器 (http://localhost:5173/)
+
+# 构建与预览
+npm run build        # 构建生产版本到 /build 目录（使用 Node.js adapter）
+npm run preview      # 预览生产构建 (http://localhost:4173/)
+
+# 代码检查与测试
+npm run check        # TypeScript 类型检查
+npm run check:watch  # 监听模式的类型检查
+npm run test         # Vitest 监听模式
+npm run test:unit    # 运行单元测试（一次）
+npm run test:e2e     # Playwright E2E 测试（需要预览服务器）
+
+# 代码质量
+npm run lint         # ESLint + Prettier 检查
+npm run format       # Prettier 自动格式化
 ```
 
 ## Technology Stack
@@ -30,7 +48,9 @@ npm run format       # Auto-format with Prettier
 - **TypeScript** (strict mode enabled)
 - **Tailwind CSS** with custom dark theme
 - **Vitest** (unit) + **Playwright** (E2E) for testing
-- **Static adapter** - deploys as pure static site to GitHub Pages
+- **Server Routes** (`src/routes/api/**/*.ts`) for backend API endpoints
+- **Node.js adapter** for local development and production builds
+- **Static adapter** - for deploying as pure static site to GitHub Pages
 
 ## Project Architecture
 
@@ -43,6 +63,11 @@ npm run format       # Auto-format with Prettier
 - **`services/`** - Resilience layer: CacheManager, CircuitBreaker, RequestDeduplicator, ServiceClient
 - **`stores/`** - Svelte stores for settings, news, markets, monitors, refresh orchestration
 - **`types/`** - TypeScript interfaces
+
+### Backend API Routes (`src/routes/api/`)
+
+- **`/api/cron/news-refresh`** - Scheduled news refresh endpoint
+- **`/api/news/snapshot`** - News data snapshot endpoint
 
 ### Path Aliases
 
@@ -97,3 +122,44 @@ GitHub Actions workflow builds with `BASE_PATH=/situation-monitor` and deploys t
 - **D3.js** for interactive map visualization
 - **CORS proxy** (Cloudflare Worker) for RSS feed parsing
 - **CoinGecko API** for cryptocurrency data
+
+---
+
+## 快速开发指南（中文）
+
+### 项目启动
+```bash
+# 完整启动（包括前端和后端 API）
+npm run dev
+
+# 访问应用
+# 前端：http://localhost:5173/
+# 后端 API 已内置在同一端口，通过路由 /api/* 访问
+```
+
+### 项目架构说明
+这是**集成的全栈应用**，不需要分别启动前后端：
+- **前端**：Svelte 5 + Vite（热更新）
+- **后端**：SvelteKit 服务端路由（与前端共享端口 5173）
+- **数据库**（可选）：Turso/LibSQL（需配置 `.env`）
+
+### 常见开发任务
+```bash
+# 类型检查
+npm run check
+
+# 单元测试（一次）
+npm run test:unit
+
+# 代码格式化
+npm run format
+
+# 代码质量检查
+npm run lint
+```
+
+### 代码修改建议
+1. 修改前创建特性分支
+2. 前端组件在 `src/lib/components/`
+3. 后端 API 在 `src/routes/api/`
+4. 配置文件在 `src/lib/config/`

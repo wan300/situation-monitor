@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { SectorPerformance } from '$lib/types';
 	import { formatPercentChange } from '$lib/utils';
+	import { language } from '$lib/stores';
 
 	interface Props {
 		sector: SectorPerformance;
@@ -22,7 +23,7 @@
 		return 'down-3';
 	}
 
-	const changeText = $derived(formatPercentChange(sector.changePercent));
+	const changeText = $derived(formatPercentChange(sector.changePercent, 2, $language));
 </script>
 
 <div class="heatmap-cell {colorClass}">

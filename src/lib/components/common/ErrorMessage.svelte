@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { ui } from '$lib/stores';
+
 	interface Props {
 		message: string;
 		retry?: () => void;
@@ -11,7 +13,7 @@
 	<div class="error-icon">⚠</div>
 	<div class="error-message">{message}</div>
 	{#if retry}
-		<button class="retry-btn" onclick={retry}>Retry</button>
+		<button class="retry-btn" onclick={retry}>{$ui.common.retry}</button>
 	{/if}
 </div>
 

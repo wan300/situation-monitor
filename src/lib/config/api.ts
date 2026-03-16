@@ -69,6 +69,16 @@ export async function fetchWithProxy(url: string): Promise<Response> {
 }
 
 /**
+ * SiliconFlow API (DeepSeek-V3 and other models)
+ * Get your key at: https://siliconflow.cn/
+ */
+export const SILICONFLOW_API_KEY = browser
+	? ''
+	: (process.env.SILICONFLOW_API_KEY ?? '');
+export const SILICONFLOW_BASE_URL = 'https://api.siliconflow.cn/v1';
+export const SILICONFLOW_MODEL = 'deepseek-ai/DeepSeek-V3';
+
+/**
  * API request delays (ms) to avoid rate limiting
  */
 export const API_DELAYS = {

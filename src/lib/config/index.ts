@@ -20,11 +20,13 @@ export { FEEDS, INTEL_SOURCES, type FeedSource, type IntelSource } from './feeds
 export {
 	ALERT_KEYWORDS,
 	REGION_KEYWORDS,
+	REGION_HOTSPOT_SPREAD,
 	TOPIC_KEYWORDS,
 	containsAlertKeyword,
 	detectRegion,
 	detectTopics,
-	type AlertKeyword
+	type AlertKeyword,
+	type RegionalHotspotSpread
 } from './keywords';
 
 // Market configuration

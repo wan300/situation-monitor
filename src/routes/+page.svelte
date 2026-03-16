@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import { Header, Dashboard } from '$lib/components/layout';
 	import { SettingsModal, MonitorFormModal, OnboardingModal } from '$lib/components/modals';
 	import {
@@ -31,10 +32,13 @@
 		refresh,
 		allNewsItems,
 		fedIndicators,
-		fedNews
+		fedNews,
+		language,
+		ui,
+		hotspotsStore
 	} from '$lib/stores';
 	import {
-		fetchAllNews,
+		fetchNewsSnapshot,
 		fetchAllMarkets,
 		fetchPolymarket,
 		fetchWhaleTransactions,
@@ -42,11 +46,13 @@
 		fetchLayoffs,
 		fetchWorldLeaders,
 		fetchFedIndicators,
-		fetchFedNews
+		fetchFedNews,
+		fetchFedBalanceSheet
 	} from '$lib/api';
-	import type { Prediction, WhaleTransaction, Contract, Layoff } from '$lib/api';
+	import type { Prediction, WhaleTransaction, Contract, Layoff, FedBalanceSheet } from '$lib/api';
 	import type { CustomMonitor, WorldLeader } from '$lib/types';
 	import type { PanelId } from '$lib/config';
+	import { getNewsPanelTitle, getSituationCopy } from '$lib/i18n';
 
 	// Modal state
 	let settingsOpen = $state(false);
@@ -61,6 +67,72 @@
 	let layoffs = $state<Layoff[]>([]);
 	let leaders = $state<WorldLeader[]>([]);
 	let leadersLoading = $state(false);
+	let printerData = $state<FedBalanceSheet | null>(null);
+	let printerLoading = $state(false);
+	let loadedLanguageForHotspots = $state<string | null>(null);
+
+	const CLIENT_FETCH_INTERVAL_MS = 60 * 60 * 1000;
+	const CLIENT_CACHE_PREFIX = 'sm-panel-cache';
+
+	interface CacheEnvelope<T> {
+		timestamp: number;
+		data: T;
+	}
+
+	interface MiscCachePayload {
+		predictions: Prediction[];
+		whales: WhaleTransaction[];
+		contracts: Contract[];
+		layoffs: Layoff[];
+	}
+
+	interface FedCachePayload {
+		indicators: Awaited<ReturnType<typeof fetchFedIndicators>>;
+		news: Awaited<ReturnType<typeof fetchFedNews>>;
+		balanceSheet: FedBalanceSheet;
+	}
+
+	function readFreshCache<T>(key: string, maxAgeMs: number): T | null {
+		if (!browser) {
+			return null;
+		}
+
+		try {
+			const raw = localStorage.getItem(`${CLIENT_CACHE_PREFIX}:${key}`);
+			if (!raw) {
+				return null;
+			}
+
+			const parsed = JSON.parse(raw) as CacheEnvelope<T>;
+			if (!parsed?.timestamp) {
+				return null;
+			}
+
+			if (Date.now() - parsed.timestamp > maxAgeMs) {
+				return null;
+			}
+
+			return parsed.data;
+		} catch {
+			return null;
+		}
+	}
+
+	function writeCache<T>(key: string, data: T): void {
+		if (!browser) {
+			return;
+		}
+
+		try {
+			const payload: CacheEnvelope<T> = {
+				timestamp: Date.now(),
+				data
+			};
+			localStorage.setItem(`${CLIENT_CACHE_PREFIX}:${key}`, JSON.stringify(payload));
+		} catch (error) {
+			console.warn(`Failed to persist cache for ${key}:`, error);
+		}
+	}
 
 	// Data fetching
 	async function loadNews() {
@@ -69,10 +141,10 @@
 		categories.forEach((cat) => news.setLoading(cat, true));
 
 		try {
-			const data = await fetchAllNews();
-			Object.entries(data).forEach(([category, items]) => {
-				news.setItems(category as keyof typeof data, items);
-			});
+			const snapshot = await fetchNewsSnapshot(20);
+			for (const category of categories) {
+				news.setItems(category, snapshot.categories[category] ?? []);
+			}
 		} catch (error) {
 			categories.forEach((cat) => news.setError(cat, String(error)));
 		}
@@ -80,11 +152,24 @@
 
 	async function loadMarkets() {
 		try {
+			const cached = readFreshCache<Awaited<ReturnType<typeof fetchAllMarkets>>>(
+				'markets',
+				CLIENT_FETCH_INTERVAL_MS
+			);
+			if (cached) {
+				markets.setIndices(cached.indices);
+				markets.setSectors(cached.sectors);
+				markets.setCommodities(cached.commodities);
+				markets.setCrypto(cached.crypto);
+				return;
+			}
+
 			const data = await fetchAllMarkets();
 			markets.setIndices(data.indices);
 			markets.setSectors(data.sectors);
 			markets.setCommodities(data.commodities);
 			markets.setCrypto(data.crypto);
+			writeCache('markets', data);
 		} catch (error) {
 			console.error('Failed to load markets:', error);
 		}
@@ -92,6 +177,15 @@
 
 	async function loadMiscData() {
 		try {
+			const cached = readFreshCache<MiscCachePayload>('misc', CLIENT_FETCH_INTERVAL_MS);
+			if (cached) {
+				predictions = cached.predictions;
+				whales = cached.whales;
+				contracts = cached.contracts;
+				layoffs = cached.layoffs;
+				return;
+			}
+
 			const [predictionsData, whalesData, contractsData, layoffsData] = await Promise.all([
 				fetchPolymarket(),
 				fetchWhaleTransactions(),
@@ -102,6 +196,12 @@
 			whales = whalesData;
 			contracts = contractsData;
 			layoffs = layoffsData;
+			writeCache('misc', {
+				predictions: predictionsData,
+				whales: whalesData,
+				contracts: contractsData,
+				layoffs: layoffsData
+			});
 		} catch (error) {
 			console.error('Failed to load misc data:', error);
 		}
@@ -109,9 +209,17 @@
 
 	async function loadWorldLeaders() {
 		if (!isPanelVisible('leaders')) return;
+
+		const cached = readFreshCache<WorldLeader[]>('leaders', CLIENT_FETCH_INTERVAL_MS);
+		if (cached) {
+			leaders = cached;
+			return;
+		}
+
 		leadersLoading = true;
 		try {
 			leaders = await fetchWorldLeaders();
+			writeCache('leaders', leaders);
 		} catch (error) {
 			console.error('Failed to load world leaders:', error);
 		} finally {
@@ -120,17 +228,41 @@
 	}
 
 	async function loadFedData() {
-		if (!isPanelVisible('fed')) return;
+		if (!isPanelVisible('fed') && !isPanelVisible('printer')) return;
+
+		const cached = readFreshCache<FedCachePayload>('fed', CLIENT_FETCH_INTERVAL_MS);
+		if (cached) {
+			fedIndicators.setData(cached.indicators);
+			fedNews.setItems(cached.news);
+			if (isPanelVisible('printer')) {
+				printerData = cached.balanceSheet;
+			}
+			return;
+		}
+
 		fedIndicators.setLoading(true);
 		fedNews.setLoading(true);
+		if (isPanelVisible('printer')) printerLoading = true;
 		try {
-			const [indicatorsData, newsData] = await Promise.all([fetchFedIndicators(), fetchFedNews()]);
+			const [indicatorsData, newsData, balanceSheetData] = await Promise.all([
+				fetchFedIndicators(),
+				fetchFedNews(),
+				fetchFedBalanceSheet()
+			]);
 			fedIndicators.setData(indicatorsData);
 			fedNews.setItems(newsData);
+			printerData = balanceSheetData;
+			writeCache('fed', {
+				indicators: indicatorsData,
+				news: newsData,
+				balanceSheet: balanceSheetData
+			});
 		} catch (error) {
 			console.error('Failed to load Fed data:', error);
 			fedIndicators.setError(String(error));
 			fedNews.setError(String(error));
+		} finally {
+			printerLoading = false;
 		}
 	}
 
@@ -139,6 +271,8 @@
 		refresh.startRefresh();
 		try {
 			await Promise.all([loadNews(), loadMarkets()]);
+			// Hotspots depend on fresh news, so load after news completes
+			hotspotsStore.load();
 			refresh.endRefresh();
 		} catch (error) {
 			refresh.endRefresh([String(error)]);
@@ -202,6 +336,8 @@
 					loadWorldLeaders(),
 					loadFedData()
 				]);
+				// Load dynamic hotspots after news is ready
+				hotspotsStore.load();
 				refresh.endRefresh();
 			} catch (error) {
 				refresh.endRefresh([String(error)]);
@@ -214,11 +350,28 @@
 			refresh.stopAutoRefresh();
 		};
 	});
+
+	$effect(() => {
+		const currentLanguage = $language;
+		if (!browser) {
+			return;
+		}
+
+		if (loadedLanguageForHotspots === null) {
+			loadedLanguageForHotspots = currentLanguage;
+			return;
+		}
+
+		if (loadedLanguageForHotspots !== currentLanguage) {
+			loadedLanguageForHotspots = currentLanguage;
+			hotspotsStore.load({ forceRefresh: true });
+		}
+	});
 </script>
 
 <svelte:head>
-	<title>Situation Monitor</title>
-	<meta name="description" content="Real-time global situation monitoring dashboard" />
+	<title>{$ui.meta.title}</title>
+	<meta name="description" content={$ui.meta.description} />
 </svelte:head>
 
 <div class="app">
@@ -236,31 +389,39 @@
 			<!-- News Panels -->
 			{#if isPanelVisible('politics')}
 				<div class="panel-slot">
-					<NewsPanel category="politics" panelId="politics" title="Politics" />
+					<NewsPanel
+						category="politics"
+						panelId="politics"
+						title={getNewsPanelTitle('politics', $language)}
+					/>
 				</div>
 			{/if}
 
 			{#if isPanelVisible('tech')}
 				<div class="panel-slot">
-					<NewsPanel category="tech" panelId="tech" title="Tech" />
+					<NewsPanel category="tech" panelId="tech" title={getNewsPanelTitle('tech', $language)} />
 				</div>
 			{/if}
 
 			{#if isPanelVisible('finance')}
 				<div class="panel-slot">
-					<NewsPanel category="finance" panelId="finance" title="Finance" />
+					<NewsPanel
+						category="finance"
+						panelId="finance"
+						title={getNewsPanelTitle('finance', $language)}
+					/>
 				</div>
 			{/if}
 
 			{#if isPanelVisible('gov')}
 				<div class="panel-slot">
-					<NewsPanel category="gov" panelId="gov" title="Government" />
+					<NewsPanel category="gov" panelId="gov" title={getNewsPanelTitle('gov', $language)} />
 				</div>
 			{/if}
 
 			{#if isPanelVisible('ai')}
 				<div class="panel-slot">
-					<NewsPanel category="ai" panelId="ai" title="AI" />
+					<NewsPanel category="ai" panelId="ai" title={getNewsPanelTitle('ai', $language)} />
 				</div>
 			{/if}
 
@@ -335,8 +496,8 @@
 					<SituationPanel
 						panelId="venezuela"
 						config={{
-							title: 'Venezuela Watch',
-							subtitle: 'Humanitarian crisis monitoring',
+							title: getSituationCopy('venezuela', $language).title,
+							subtitle: getSituationCopy('venezuela', $language).subtitle,
 							criticalKeywords: ['maduro', 'caracas', 'venezuela', 'guaido']
 						}}
 						news={$allNewsItems.filter(
@@ -353,8 +514,8 @@
 					<SituationPanel
 						panelId="greenland"
 						config={{
-							title: 'Greenland Watch',
-							subtitle: 'Arctic geopolitics monitoring',
+							title: getSituationCopy('greenland', $language).title,
+							subtitle: getSituationCopy('greenland', $language).subtitle,
 							criticalKeywords: ['greenland', 'arctic', 'nuuk', 'denmark']
 						}}
 						news={$allNewsItems.filter(
@@ -371,8 +532,8 @@
 					<SituationPanel
 						panelId="iran"
 						config={{
-							title: 'Iran Crisis',
-							subtitle: 'Revolution protests, regime instability & nuclear program',
+							title: getSituationCopy('iran', $language).title,
+							subtitle: getSituationCopy('iran', $language).subtitle,
 							criticalKeywords: [
 								'protest',
 								'uprising',
@@ -424,7 +585,7 @@
 			<!-- Money Printer Panel -->
 			{#if isPanelVisible('printer')}
 				<div class="panel-slot">
-					<PrinterPanel />
+					<PrinterPanel data={printerData} loading={printerLoading} />
 				</div>
 			{/if}
 

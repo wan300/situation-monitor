@@ -2,6 +2,12 @@
 	import { Panel, Badge } from '$lib/components/common';
 	import { analyzeCorrelations } from '$lib/analysis/correlation';
 	import type { NewsItem } from '$lib/types';
+	import { language, ui } from '$lib/stores';
+	import {
+		getCorrelationTopicName,
+		getStatusLabel,
+		translatePredictionText
+	} from '$lib/i18n';
 
 	interface Props {
 		news?: NewsItem[];
@@ -46,25 +52,27 @@
 	}
 </script>
 
-<Panel id="correlation" title="Pattern Analysis" {loading} {error}>
+<Panel id="correlation" title={$ui.panels.correlation.title} {loading} {error}>
 	{#if news.length === 0 && !loading && !error}
-		<div class="empty-state">Insufficient data for analysis</div>
+		<div class="empty-state">{$ui.panels.correlation.insufficientData}</div>
 	{:else if analysis}
 		<div class="correlation-content">
 			{#if analysis.emergingPatterns.length > 0}
 				<div class="section">
-					<div class="section-title">Emerging Patterns</div>
+					<div class="section-title">{$ui.panels.correlation.emergingPatterns}</div>
 					{#each analysis.emergingPatterns.slice(0, 3) as pattern}
 						<div class="pattern-item">
 							<div class="pattern-header">
-								<span class="pattern-topic">{pattern.name}</span>
+								<span class="pattern-topic">
+									{getCorrelationTopicName(pattern.id, $language, pattern.name)}
+								</span>
 								<Badge
-									text={pattern.level.toUpperCase()}
+									text={getStatusLabel(pattern.level, $language)}
 									variant={getLevelVariant(pattern.level)}
 								/>
 							</div>
 							<div class="pattern-sources">
-								{pattern.sources.slice(0, 3).join(' · ')} ({pattern.count} items)
+								{pattern.sources.slice(0, 3).join(' · ')} ({$ui.common.itemCount(pattern.count)})
 							</div>
 						</div>
 					{/each}
@@ -73,10 +81,12 @@
 
 			{#if analysis.momentumSignals.length > 0}
 				<div class="section">
-					<div class="section-title">Momentum Signals</div>
+					<div class="section-title">{$ui.panels.correlation.momentumSignals}</div>
 					{#each analysis.momentumSignals.slice(0, 3) as signal}
 						<div class="signal-item {getMomentumClass(signal.momentum)}">
-							<span class="signal-topic">{signal.name}</span>
+							<span class="signal-topic">
+								{getCorrelationTopicName(signal.id, $language, signal.name)}
+							</span>
 							<span
 								class="signal-direction"
 								class:up={signal.delta > 0}
@@ -92,13 +102,15 @@
 
 			{#if analysis.crossSourceCorrelations.length > 0}
 				<div class="section">
-					<div class="section-title">Cross-Source Links</div>
+					<div class="section-title">{$ui.panels.correlation.crossSourceLinks}</div>
 					{#each analysis.crossSourceCorrelations.slice(0, 3) as corr}
 						<div class="correlation-item">
 							<div class="correlation-sources">
 								{corr.sources.slice(0, 2).join(' ↔ ')}
 							</div>
-							<div class="correlation-topic">{corr.name} ({corr.sourceCount} sources)</div>
+							<div class="correlation-topic">
+								{getCorrelationTopicName(corr.id, $language, corr.name)} ({$ui.common.sourceCount(corr.sourceCount)})
+							</div>
 						</div>
 					{/each}
 				</div>
@@ -106,12 +118,14 @@
 
 			{#if analysis.predictiveSignals.length > 0}
 				<div class="section">
-					<div class="section-title">Predictive Signals</div>
+					<div class="section-title">{$ui.panels.correlation.predictiveSignals}</div>
 					{#each analysis.predictiveSignals.slice(0, 2) as signal}
 						<div class="predictive-item">
-							<div class="predictive-pattern">{signal.prediction}</div>
+							<div class="predictive-pattern">
+								{translatePredictionText(signal.prediction, $language)}
+							</div>
 							<div class="predictive-confidence">
-								Confidence: {Math.round(signal.confidence * 100)}%
+								{$ui.panels.correlation.confidence(Math.round(signal.confidence * 100))}
 							</div>
 						</div>
 					{/each}
@@ -119,11 +133,11 @@
 			{/if}
 
 			{#if analysis.emergingPatterns.length === 0 && analysis.momentumSignals.length === 0}
-				<div class="empty-state">No significant patterns detected</div>
+				<div class="empty-state">{$ui.panels.correlation.noPatterns}</div>
 			{/if}
 		</div>
 	{:else}
-		<div class="empty-state">No significant patterns detected</div>
+		<div class="empty-state">{$ui.panels.correlation.noPatterns}</div>
 	{/if}
 </Panel>
 

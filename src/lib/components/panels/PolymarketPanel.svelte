@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Panel } from '$lib/components/common';
+	import { formatCurrency } from '$lib/utils';
+	import { language, ui } from '$lib/stores';
 
 	interface Prediction {
 		id: string;
@@ -20,24 +22,29 @@
 	const count = $derived(predictions.length);
 
 	function formatVolume(v: number | string): string {
-		if (typeof v === 'string') return '$' + v;
+		if (typeof v === 'string') {
+			const numeric = Number(v);
+			return Number.isFinite(numeric)
+				? formatCurrency(numeric, { compact: true, locale: $language })
+				: '$' + v;
+		}
 		if (!v) return '$0';
-		if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
-		if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
-		return '$' + v.toFixed(0);
+		return formatCurrency(v, { compact: true, locale: $language });
 	}
 </script>
 
-<Panel id="polymarket" title="Polymarket" {count} {loading} {error}>
+<Panel id="polymarket" title={$ui.panels.polymarket.title} {count} {loading} {error}>
 	{#if predictions.length === 0 && !loading && !error}
-		<div class="empty-state">No predictions available</div>
+		<div class="empty-state">{$ui.panels.polymarket.empty}</div>
 	{:else}
 		<div class="predictions-list">
 			{#each predictions as pred (pred.id)}
 				<div class="prediction-item">
 					<div class="prediction-info">
 						<div class="prediction-question">{pred.question}</div>
-						<div class="prediction-volume">Vol: {formatVolume(pred.volume)}</div>
+						<div class="prediction-volume">
+							{$ui.panels.polymarket.volume(formatVolume(pred.volume))}
+						</div>
 					</div>
 					<div class="prediction-odds">
 						<span class="prediction-yes">{pred.yes}%</span>
