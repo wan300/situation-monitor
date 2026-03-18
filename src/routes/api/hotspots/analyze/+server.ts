@@ -1,10 +1,9 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { NewsItem } from '$lib/types';
-import { getLatestNewsSnapshot } from '$lib/server/news/ingest';
+import { getLatestNewsSnapshotByWindow } from '$lib/server/news/ingest';
 import { analyzeHotspots, filterConflictFocusedNews, scoresToHotspots } from '$lib/server/hotspots/analyze';
 import {
-	HOTSPOT_ANALYSIS_WINDOW_MS,
+	HOTSPOT_LONG_TERM_WINDOW_DAYS,
 	HOTSPOT_SAMPLE_LIMIT
 } from '$lib/server/hotspots/constants';
 import { enrichHotspotsWithLLM } from '$lib/server/hotspots/llm';
@@ -27,10 +26,7 @@ function isCacheValid(): boolean {
 	return cache !== null && Date.now() - cache.updatedAt < CACHE_TTL_MS;
 }
 
-function filterNewsByWindow(newsItems: NewsItem[], windowMs: number): NewsItem[] {
-	const cutoff = Date.now() - windowMs;
-	return newsItems.filter((item) => item.timestamp >= cutoff);
-}
+
 
 export const GET: RequestHandler = async ({ url }) => {
 	// Allow cache bypass via ?refresh=1 for testing
@@ -48,14 +44,14 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	try {
 		// Fetch latest news from all categories
-		const snapshot = await getLatestNewsSnapshot(HOTSPOT_SAMPLE_LIMIT);
+		const snapshot = await getLatestNewsSnapshotByWindow(HOTSPOT_LONG_TERM_WINDOW_DAYS, HOTSPOT_SAMPLE_LIMIT);
 		const allNews = Object.values(snapshot.categories).flat();
 		const conflictFocusedNews = filterConflictFocusedNews(
-			filterNewsByWindow(allNews, HOTSPOT_ANALYSIS_WINDOW_MS)
+			allNews
 		);
 
 		if (conflictFocusedNews.length === 0) {
-			// No news data yet â€” return empty dynamic set
+			// No news data yet â€?return empty dynamic set
 			return json({
 				hotspots: [],
 				updatedAt: Date.now(),
@@ -138,3 +134,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		);
 	}
 };
+
+
+
+

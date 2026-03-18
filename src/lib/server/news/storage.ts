@@ -214,3 +214,42 @@ export async function getNewsSnapshot(db: Client, limitPerCategory: number): Pro
 		totalItems
 	};
 }
+
+export async function getNewsSnapshotByWindow(
+	db: Client,
+	windowDays: number,
+	limitPerCategory: number
+): Promise<NewsSnapshot> {
+	const safeWindowDays = Number.isFinite(windowDays) ? Math.max(1, Math.floor(windowDays)) : 1;
+	const cutoffTimestamp = Date.now() - safeWindowDays * 24 * 60 * 60 * 1000;
+	const categories = emptyCategories();
+
+	for (const category of NEWS_CATEGORIES) {
+		const result = await db.execute({
+			sql: `
+				SELECT id, title, link, source, pub_date, timestamp, is_alert, alert_keyword, region, topics_json
+				FROM news_items
+				WHERE category = ? AND timestamp >= ?
+				ORDER BY timestamp DESC
+				LIMIT ?
+			`,
+			args: [category, cutoffTimestamp, limitPerCategory]
+		});
+
+		categories[category] = result.rows.map((row) => rowToNewsItem(row as Record<string, unknown>, category));
+	}
+
+	const ingestResult = await db.execute({
+		sql: "SELECT MAX(completed_at) AS last_ingest_at FROM news_ingest_runs WHERE status = 'success'"
+	});
+
+	const ingestRow = ingestResult.rows[0] as Record<string, unknown> | undefined;
+	const lastIngestAt = toNullableNumber(ingestRow?.last_ingest_at);
+	const totalItems = NEWS_CATEGORIES.reduce((sum, category) => sum + categories[category].length, 0);
+
+	return {
+		categories,
+		lastIngestAt,
+		totalItems
+	};
+}

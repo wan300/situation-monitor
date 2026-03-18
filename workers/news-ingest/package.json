@@ -1,0 +1,13 @@
+{
+  "name": "situation-monitor-news-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "once": "node index.mjs once",
+    "health": "node index.mjs health"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.0"
+  }
+}

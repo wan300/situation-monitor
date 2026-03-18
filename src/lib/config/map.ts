@@ -21,7 +21,20 @@ export interface Hotspot {
 	sourceDiversity?: number;
 	country?: string;
 	lastSeenAt?: number;
-	/** Keywords used to match this hotspot against news headlines for dynamic scoring */
+	layer?: 'focus' | 'regional';
+	parentRegion?: string;
+	coreDrivers?: string[];
+	driverSummary?: LocalizedText;
+	scoreBreakdown?: {
+		frequency: number;
+		conflict: number;
+		power: number;
+		spillover: number;
+		temporal: number;
+		total: number;
+	};
+	powerActors?: string[];
+	evidenceHeadlines?: string[];
 	keywords?: string[];
 }
 
@@ -74,14 +87,14 @@ export const THREAT_COLORS = {
 } as const;
 
 export const SANCTIONED_COUNTRY_IDS = [
-	364, // Iran
-	408, // North Korea
-	760, // Syria
-	862, // Venezuela
-	112, // Belarus
-	643, // Russia
-	728, // South Sudan
-	729 // Sudan
+	364,
+	408,
+	760,
+	862,
+	112,
+	643,
+	728,
+	729
 ];
 
 export const HOTSPOTS: Hotspot[] = [
@@ -91,7 +104,20 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: -77.0,
 		level: 'low',
 		desc: 'Washington DC — US political center, White House, Pentagon, Capitol',
-		keywords: ['washington', 'white house', 'pentagon', 'congress', 'senate', 'trump', 'biden', 'federal government', 'capitol', 'cia', 'nsa', 'us president']
+		keywords: [
+			'washington',
+			'white house',
+			'pentagon',
+			'congress',
+			'senate',
+			'trump',
+			'biden',
+			'federal government',
+			'capitol',
+			'cia',
+			'nsa',
+			'us president'
+		]
 	},
 	{
 		name: 'Moscow',
@@ -99,7 +125,18 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 37.6,
 		level: 'elevated',
 		desc: 'Moscow — Kremlin, Russian military command, sanctions hub',
-		keywords: ['russia', 'moscow', 'kremlin', 'putin', 'russian', 'fsb', 'svr', 'russian military', 'russian Federation', 'lavrov']
+		keywords: [
+			'russia',
+			'moscow',
+			'kremlin',
+			'putin',
+			'russian',
+			'fsb',
+			'svr',
+			'russian military',
+			'russian Federation',
+			'lavrov'
+		]
 	},
 	{
 		name: 'Beijing',
@@ -107,7 +144,19 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 116.4,
 		level: 'elevated',
 		desc: 'Beijing — CCP headquarters, US-China tensions, tech rivalry',
-		keywords: ['china', 'beijing', 'xi jinping', 'ccp', 'pla', 'chinese military', 'chinese government', 'politburo', 'us-china', 'bri', 'belt and road']
+		keywords: [
+			'china',
+			'beijing',
+			'xi jinping',
+			'ccp',
+			'pla',
+			'chinese military',
+			'chinese government',
+			'politburo',
+			'us-china',
+			'bri',
+			'belt and road'
+		]
 	},
 	{
 		name: 'Kyiv',
@@ -115,7 +164,20 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 30.5,
 		level: 'high',
 		desc: 'Kyiv — Active conflict zone, Russian invasion ongoing',
-		keywords: ['ukraine', 'kyiv', 'zelensky', 'ukrainian', 'donetsk', 'kharkiv', 'odesa', 'zaporizhzhia', 'mariupol', 'dnipro', 'invasion', 'war in ukraine']
+		keywords: [
+			'ukraine',
+			'kyiv',
+			'zelensky',
+			'ukrainian',
+			'donetsk',
+			'kharkiv',
+			'odesa',
+			'zaporizhzhia',
+			'mariupol',
+			'dnipro',
+			'invasion',
+			'war in ukraine'
+		]
 	},
 	{
 		name: 'Taipei',
@@ -123,7 +185,17 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 121.5,
 		level: 'elevated',
 		desc: 'Taipei — Taiwan Strait tensions, TSMC, China threat',
-		keywords: ['taiwan', 'taipei', 'tsmc', 'taiwan strait', 'taiwanese', 'pla navy', 'cross-strait', 'reunification', 'semiconductor']
+		keywords: [
+			'taiwan',
+			'taipei',
+			'tsmc',
+			'taiwan strait',
+			'taiwanese',
+			'pla navy',
+			'cross-strait',
+			'reunification',
+			'semiconductor'
+		]
 	},
 	{
 		name: 'Tehran',
@@ -131,7 +203,20 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 51.4,
 		level: 'critical',
 		desc: 'Tehran — ACTIVE UPRISING: 200+ cities, 26 provinces. Revolution protests, regime instability, nuclear program',
-		keywords: ['iran', 'tehran', 'irgc', 'ayatollah', 'khamenei', 'iranian', 'nuclear program', 'uranium enrichment', 'persian', 'raisi', 'hassan nasrallah', 'iranian protests']
+		keywords: [
+			'iran',
+			'tehran',
+			'irgc',
+			'ayatollah',
+			'khamenei',
+			'iranian',
+			'nuclear program',
+			'uranium enrichment',
+			'persian',
+			'raisi',
+			'hassan nasrallah',
+			'iranian protests'
+		]
 	},
 	{
 		name: 'Tel Aviv',
@@ -139,7 +224,20 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 34.78,
 		level: 'high',
 		desc: 'Tel Aviv — Israel-Gaza conflict, active military operations',
-		keywords: ['israel', 'gaza', 'tel aviv', 'idf', 'hamas', 'netanyahu', 'west bank', 'hezbollah', 'iron dome', 'israeli', 'palestinian', 'jerusalem']
+		keywords: [
+			'israel',
+			'gaza',
+			'tel aviv',
+			'idf',
+			'hamas',
+			'netanyahu',
+			'west bank',
+			'hezbollah',
+			'iron dome',
+			'israeli',
+			'palestinian',
+			'jerusalem'
+		]
 	},
 	{
 		name: 'London',
@@ -147,7 +245,19 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: -0.12,
 		level: 'low',
 		desc: 'London — Financial center, Five Eyes, NATO ally',
-		keywords: ['uk', 'britain', 'london', 'gchq', 'mi6', 'british government', 'nato ally', 'five eyes', 'sunak', 'starmer', 'bank of england']
+		keywords: [
+			'uk',
+			'britain',
+			'london',
+			'gchq',
+			'mi6',
+			'british government',
+			'nato ally',
+			'five eyes',
+			'sunak',
+			'starmer',
+			'bank of england'
+		]
 	},
 	{
 		name: 'Brussels',
@@ -155,7 +265,17 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 4.35,
 		level: 'low',
 		desc: 'Brussels — EU/NATO headquarters, European policy',
-		keywords: ['eu', 'european union', 'nato', 'brussels', 'european commission', 'nato headquarters', 'european parliament', 'von der leyen', 'european council']
+		keywords: [
+			'eu',
+			'european union',
+			'nato',
+			'brussels',
+			'european commission',
+			'nato headquarters',
+			'european parliament',
+			'von der leyen',
+			'european council'
+		]
 	},
 	{
 		name: 'Pyongyang',
@@ -163,7 +283,17 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 125.75,
 		level: 'elevated',
 		desc: 'Pyongyang — North Korea nuclear threat, missile tests',
-		keywords: ['north korea', 'pyongyang', 'kim jong un', 'dprk', 'icbm', 'north korean', 'missile test', 'nuclear test', 'north korean military']
+		keywords: [
+			'north korea',
+			'pyongyang',
+			'kim jong un',
+			'dprk',
+			'icbm',
+			'north korean',
+			'missile test',
+			'nuclear test',
+			'north korean military'
+		]
 	},
 	{
 		name: 'Riyadh',
@@ -171,7 +301,18 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 46.7,
 		level: 'elevated',
 		desc: 'Riyadh — Saudi oil, OPEC+, Yemen conflict, regional power',
-		keywords: ['saudi', 'riyadh', 'opec', 'saudi aramco', 'bin salman', 'mbs', 'saudi arabia', 'gulf', 'aramco', 'oil production']
+		keywords: [
+			'saudi',
+			'riyadh',
+			'opec',
+			'saudi aramco',
+			'bin salman',
+			'mbs',
+			'saudi arabia',
+			'gulf',
+			'aramco',
+			'oil production'
+		]
 	},
 	{
 		name: 'Delhi',
@@ -179,7 +320,18 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 77.2,
 		level: 'low',
 		desc: 'Delhi — India rising power, China border tensions',
-		keywords: ['india', 'delhi', 'modi', 'indian government', 'india-china', 'lac', 'line of actual control', 'indo-pacific', 'indian military', 'kashmir']
+		keywords: [
+			'india',
+			'delhi',
+			'modi',
+			'indian government',
+			'india-china',
+			'lac',
+			'line of actual control',
+			'indo-pacific',
+			'indian military',
+			'kashmir'
+		]
 	},
 	{
 		name: 'Singapore',
@@ -195,7 +347,19 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: 139.76,
 		level: 'low',
 		desc: 'Tokyo — US ally, regional security, economic power',
-		keywords: ['japan', 'tokyo', 'japanese government', 'jsdf', 'kishida', 'japan-us', 'japan-china', 'japanese yen', 'boj', 'bank of japan', 'japanese military']
+		keywords: [
+			'japan',
+			'tokyo',
+			'japanese government',
+			'jsdf',
+			'kishida',
+			'japan-us',
+			'japan-china',
+			'japanese yen',
+			'boj',
+			'bank of japan',
+			'japanese military'
+		]
 	},
 	{
 		name: 'Caracas',
@@ -203,7 +367,17 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: -66.9,
 		level: 'high',
 		desc: 'Caracas — Venezuela crisis, Maduro regime, US sanctions, humanitarian emergency',
-		keywords: ['venezuela', 'caracas', 'maduro', 'venezuelan', 'pdvsa', 'venezuelan opposition', 'us sanctions venezuela', 'guaido', 'migrant crisis venezuela']
+		keywords: [
+			'venezuela',
+			'caracas',
+			'maduro',
+			'venezuelan',
+			'pdvsa',
+			'venezuelan opposition',
+			'us sanctions venezuela',
+			'guaido',
+			'migrant crisis venezuela'
+		]
 	},
 	{
 		name: 'Nuuk',
@@ -211,7 +385,17 @@ export const HOTSPOTS: Hotspot[] = [
 		lon: -51.72,
 		level: 'elevated',
 		desc: 'Nuuk — Greenland, US acquisition interest, Arctic strategy, Denmark tensions',
-		keywords: ['greenland', 'nuuk', 'arctic', 'denmark', 'danish', 'trump greenland', 'arctic sovereignty', 'northwest passage', 'arctic strategy']
+		keywords: [
+			'greenland',
+			'nuuk',
+			'arctic',
+			'denmark',
+			'danish',
+			'trump greenland',
+			'arctic sovereignty',
+			'northwest passage',
+			'arctic strategy'
+		]
 	}
 ];
 
@@ -291,43 +475,13 @@ export const CONFLICT_ZONES: ConflictZone[] = [
 ];
 
 export const CHOKEPOINTS: Chokepoint[] = [
-	{
-		name: 'Suez',
-		lat: 30.0,
-		lon: 32.5,
-		desc: 'Suez Canal — 12% of global trade, Europe-Asia route'
-	},
-	{
-		name: 'Panama',
-		lat: 9.1,
-		lon: -79.7,
-		desc: 'Panama Canal — Americas transit, Pacific-Atlantic link'
-	},
-	{
-		name: 'Hormuz',
-		lat: 26.5,
-		lon: 56.5,
-		desc: 'Strait of Hormuz — 21% of global oil, Persian Gulf exit'
-	},
-	{
-		name: 'Malacca',
-		lat: 2.5,
-		lon: 101.0,
-		desc: 'Strait of Malacca — 25% of global trade, China supply line'
-	},
-	{
-		name: 'Bab el-M',
-		lat: 12.5,
-		lon: 43.3,
-		desc: 'Bab el-Mandeb — Red Sea gateway, Houthi threat zone'
-	},
+	{ name: 'Suez', lat: 30.0, lon: 32.5, desc: 'Suez Canal — 12% of global trade, Europe-Asia route' },
+	{ name: 'Panama', lat: 9.1, lon: -79.7, desc: 'Panama Canal — Americas transit, Pacific-Atlantic link' },
+	{ name: 'Hormuz', lat: 26.5, lon: 56.5, desc: 'Strait of Hormuz — 21% of global oil, Persian Gulf exit' },
+	{ name: 'Malacca', lat: 2.5, lon: 101.0, desc: 'Strait of Malacca — 25% of global trade, China supply line' },
+	{ name: 'Bab el-M', lat: 12.5, lon: 43.3, desc: 'Bab el-Mandeb — Red Sea gateway, Houthi threat zone' },
 	{ name: 'Gibraltar', lat: 36.0, lon: -5.5, desc: 'Strait of Gibraltar — Mediterranean access' },
-	{
-		name: 'Bosporus',
-		lat: 41.1,
-		lon: 29.0,
-		desc: 'Bosporus Strait — Black Sea access, Russia exports'
-	}
+	{ name: 'Bosporus', lat: 41.1, lon: 29.0, desc: 'Bosporus Strait — Black Sea access, Russia exports' }
 ];
 
 export const CABLE_LANDINGS: CableLanding[] = [
@@ -348,51 +502,21 @@ export const NUCLEAR_SITES: NuclearSite[] = [
 	{ name: 'Yongbyon', lat: 39.8, lon: 125.8, desc: 'Yongbyon — North Korea nuclear complex' },
 	{ name: 'Dimona', lat: 31.0, lon: 35.1, desc: 'Dimona — Israel nuclear facility' },
 	{ name: 'Bushehr', lat: 28.8, lon: 50.9, desc: 'Bushehr — Iran nuclear power plant' },
-	{
-		name: 'Zaporizhzhia',
-		lat: 47.5,
-		lon: 34.6,
-		desc: 'Zaporizhzhia — Europe largest NPP, conflict zone'
-	},
+	{ name: 'Zaporizhzhia', lat: 47.5, lon: 34.6, desc: 'Zaporizhzhia — Europe largest NPP, conflict zone' },
 	{ name: 'Chernobyl', lat: 51.4, lon: 30.1, desc: 'Chernobyl — Exclusion zone, occupied 2022' },
 	{ name: 'Fukushima', lat: 37.4, lon: 141.0, desc: 'Fukushima — Decommissioning site' }
 ];
 
 export const MILITARY_BASES: MilitaryBase[] = [
 	{ name: 'Ramstein', lat: 49.4, lon: 7.6, desc: 'Ramstein — US Air Force, NATO hub Germany' },
-	{
-		name: 'Diego Garcia',
-		lat: -7.3,
-		lon: 72.4,
-		desc: 'Diego Garcia — US/UK Indian Ocean base'
-	},
-	{
-		name: 'Okinawa',
-		lat: 26.5,
-		lon: 127.9,
-		desc: 'Okinawa — US Forces Japan, Pacific presence'
-	},
+	{ name: 'Diego Garcia', lat: -7.3, lon: 72.4, desc: 'Diego Garcia — US/UK Indian Ocean base' },
+	{ name: 'Okinawa', lat: 26.5, lon: 127.9, desc: 'Okinawa — US Forces Japan, Pacific presence' },
 	{ name: 'Guam', lat: 13.5, lon: 144.8, desc: 'Guam — US Pacific Command, bomber base' },
-	{
-		name: 'Djibouti',
-		lat: 11.5,
-		lon: 43.1,
-		desc: 'Djibouti — US/China/France bases, Horn of Africa'
-	},
+	{ name: 'Djibouti', lat: 11.5, lon: 43.1, desc: 'Djibouti — US/China/France bases, Horn of Africa' },
 	{ name: 'Qatar', lat: 25.1, lon: 51.3, desc: 'Al Udeid — US CENTCOM forward HQ' },
-	{
-		name: 'Kaliningrad',
-		lat: 54.7,
-		lon: 20.5,
-		desc: 'Kaliningrad — Russian Baltic exclave, missiles'
-	},
+	{ name: 'Kaliningrad', lat: 54.7, lon: 20.5, desc: 'Kaliningrad — Russian Baltic exclave, missiles' },
 	{ name: 'Sevastopol', lat: 44.6, lon: 33.5, desc: 'Sevastopol — Russian Black Sea Fleet' },
-	{
-		name: 'Hainan',
-		lat: 18.2,
-		lon: 109.5,
-		desc: 'Hainan — Chinese submarine base, South China Sea'
-	}
+	{ name: 'Hainan', lat: 18.2, lon: 109.5, desc: 'Hainan — Chinese submarine base, South China Sea' }
 ];
 
 export const OCEANS: Ocean[] = [
@@ -429,3 +553,5 @@ export const WEATHER_CODES: Record<number, string> = {
 	96: '⛈️ Thunderstorm',
 	99: '⛈️ Thunderstorm'
 };
+
+

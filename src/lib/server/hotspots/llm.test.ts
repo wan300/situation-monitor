@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Hotspot } from '$lib/config/map';
 import type { HotspotScore } from './analyze';
 
@@ -45,7 +45,14 @@ function makeScore(hotspot: Hotspot): HotspotScore {
 		mentions: hotspot.mentions ?? 4,
 		alertMentions: hotspot.alertMentions ?? 1,
 		recentMentions: hotspot.recentMentions ?? 3,
-		sourceDiversity: hotspot.sourceDiversity ?? 2
+		sourceDiversity: hotspot.sourceDiversity ?? 2,
+		dimensions: {
+			frequency: 0,
+			conflict: 0,
+			power: 0,
+			spillover: 0,
+			temporal: 0
+		}
 	};
 }
 
@@ -108,4 +115,37 @@ describe('hotspots/llm', () => {
 		expect(result.hotspots[0].nameLocalized?.['zh-CN']).toBe('基辅');
 		expect(result.hotspots[0].summary?.['zh-CN']).toBe('基辅维持高压态势。');
 	});
+
+	it('falls back when the model returns corrupted summary text', async () => {
+		process.env.SILICONFLOW_API_KEY = 'test-key';
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({
+								level: 'high',
+								summary_en: 'GreeceI���� strategic clarity behind Indian ships',
+								summary_zh: '基辅��态势升级',
+								name_zh: '基辅'
+							})
+						}
+					}
+				]
+			})
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const { enrichHotspotsWithLLM } = await import('./llm');
+		const hotspot = makeHotspot();
+		const score = makeScore(hotspot);
+		const result = await enrichHotspotsWithLLM([hotspot], [score]);
+
+		expect(result.enrichedCount).toBe(1);
+		expect(result.hotspots[0].summary?.['en-US']).toBe('Kyiv fallback summary');
+		expect(result.hotspots[0].summary?.['zh-CN']).toBe('基辅回退摘要');
+	});
 });
+
+

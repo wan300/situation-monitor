@@ -6,6 +6,7 @@ import { getNewsDb } from './db';
 import {
 	finishIngestRun,
 	getNewsSnapshot,
+	getNewsSnapshotByWindow,
 	purgeExpiredNews,
 	startIngestRun,
 	upsertNewsItems,
@@ -205,4 +206,12 @@ export async function runNewsIngestion(): Promise<NewsIngestSummary> {
 export async function getLatestNewsSnapshot(limitPerCategory = DEFAULT_NEWS_LIMIT): Promise<NewsSnapshot> {
 	const db = await getNewsDb();
 	return getNewsSnapshot(db, limitPerCategory);
+}
+
+export async function getLatestNewsSnapshotByWindow(
+	windowDays: number,
+	limitPerCategory = DEFAULT_NEWS_LIMIT
+): Promise<NewsSnapshot> {
+	const db = await getNewsDb();
+	return getNewsSnapshotByWindow(db, windowDays, limitPerCategory);
 }

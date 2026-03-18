@@ -95,10 +95,26 @@ const STOPWORDS = new Set([
 	'federal reserve',
 	'congress',
 	'senate',
+	'government',
+	'ministry',
+	'minister',
+	'committee',
+	'cabinet',
+	'court',
+	'party',
+	'bank',
+	'fund',
+	'defense',
+	'security',
+	'trade',
+	'economy',
+	'energy',
 	'president',
 	'prime minister',
 	'leader',
 	'leaders',
+	'official',
+	'officials',
 	'stocks',
 	'opposition'
 ]);
@@ -112,6 +128,15 @@ const NOISY_TITLE_TOKENS = new Set([
 	'how',
 	'leader',
 	'leaders',
+	'government',
+	'ministry',
+	'defense',
+	'security',
+	'trade',
+	'economy',
+	'energy',
+	'official',
+	'officials',
 	'stock',
 	'stocks',
 	'opposition',
@@ -159,7 +184,7 @@ function buildLocationKey(raw: string): string {
 	return canonicalizeLocationName(raw).toLowerCase();
 }
 
-function isLikelyLocation(value: string): boolean {
+export function isLikelyLocationName(value: string): boolean {
 	if (!value) return false;
 	if (value.length < MIN_CANDIDATE_LENGTH || value.length > MAX_CANDIDATE_LENGTH) return false;
 	if (/\d/.test(value)) return false;
@@ -225,7 +250,7 @@ function upsertCandidate(
 	source: CandidateSource
 ): void {
 	const canonicalName = canonicalizeLocationName(rawName);
-	if (!isLikelyLocation(canonicalName)) return;
+	if (!isLikelyLocationName(canonicalName)) return;
 
 	const key = buildLocationKey(canonicalName);
 	if (!key) return;
@@ -323,4 +348,263 @@ export function extractLocationCandidates(newsItems: NewsItem[]): LocationCandid
 			if (b.mentions !== a.mentions) return b.mentions - a.mentions;
 			return b.sourceDiversity - a.sourceDiversity;
 		});
+}
+
+export interface StructuredHotspotEvent {
+	item: NewsItem;
+	actors: string[];
+	targets: string[];
+	locations: string[];
+	battlefield?: string;
+	conflictSignals: string[];
+	interventionSignals: string[];
+	spilloverSignals: string[];
+	strategicSignals: string[];
+	powerActors: string[];
+	confidence: number;
+}
+
+export interface ExtractStructuredEventOptions {
+	conflictKeywords?: string[];
+	interventionKeywords?: string[];
+	spilloverKeywords?: string[];
+	strategicKeywords?: string[];
+	majorPowers?: string[];
+}
+
+const ACTOR_TARGET_PATTERNS = [
+	/^(?<actor>.+?)\s+(?:imposes?|imposed|slaps?|announces?|launch(?:es|ed)?|strikes?|attack(?:s|ed)?|bomb(?:s|ed)?|sanction(?:s|ed)?|pressures?|warn(?:s|ed)?|threaten(?:s|ed)?|backs?|support(?:s|ed)?|arm(?:s|ed)?)\s+(?:new\s+|fresh\s+|additional\s+)?(?:sanctions?\s+on\s+|on\s+|against\s+)?(?<target>.+?)(?:\s+(?:in|near|around|at)\s+(?<location>[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){0,3}))?$/i,
+	/^(?<actor>.+?)\s+(?:and|&)\s+(?<target>.+?)\s+(?:clash(?:es|ed)?|fight(?:s|ing)?|battle(?:s|d)?|exchange(?:s|d)?\s+fire|trade(?:s|d)?\s+strikes?)\s+(?:in|near|around|at)\s+(?<location>[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){0,3})/i,
+	/^(?<actor>.+?)\s+(?:vs\.?|versus)\s+(?<target>.+?)(?:\s+(?:in|near|around|at)\s+(?<location>[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){0,3}))?$/i
+] as const;
+
+const BATTLEFIELD_PATTERN =
+	/\b(?:in|near|around|at|off)\s+([A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){0,3})/g;
+
+const DEFAULT_CONFLICT_KEYWORDS = [
+	'war',
+	'invasion',
+	'strike',
+	'attack',
+	'shelling',
+	'offensive',
+	'frontline',
+	'clash',
+	'battle',
+	'bombardment',
+	'drone strike',
+	'ceasefire',
+	'missile'
+] as const;
+
+const DEFAULT_INTERVENTION_KEYWORDS = [
+	'sanctions',
+	'pressure',
+	'military aid',
+	'arms package',
+	'warned',
+	'intervention',
+	'deploy',
+	'veto',
+	'proxy',
+	'naval patrol'
+] as const;
+
+const DEFAULT_SPILLOVER_KEYWORDS = [
+	'refugee',
+	'oil prices',
+	'energy shock',
+	'supply chain',
+	'gas cutoff',
+	'food prices',
+	'market selloff',
+	'shipping disruption',
+	'export ban'
+] as const;
+
+const DEFAULT_STRATEGIC_KEYWORDS = [
+	'strait',
+	'chokepoint',
+	'oil',
+	'gas',
+	'pipeline',
+	'critical mineral',
+	'shipping lane',
+	'port'
+] as const;
+
+const DEFAULT_MAJOR_POWERS = [
+	'united states',
+	'us',
+	'china',
+	'russia',
+	'united kingdom',
+	'uk',
+	'france',
+	'eu',
+	'nato',
+	'india'
+] as const;
+
+function dedupeStrings(values: string[]): string[] {
+	const seen = new Set<string>();
+	const result: string[] = [];
+	for (const raw of values) {
+		const value = normalizeSpaces(raw).trim();
+		if (!value) continue;
+		const key = value.toLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		result.push(value);
+	}
+	return result;
+}
+
+function splitEntityPhrase(phrase: string): string[] {
+	const cleaned = phrase
+		.replace(/\b(?:officials?|forces|troops|government|regime)\b/gi, '')
+		.replace(/\b(?:the|an|a)\b/gi, ' ')
+		.replace(/[,:;]+/g, ' ')
+		.trim();
+
+	if (!cleaned) return [];
+
+	return dedupeStrings(
+		cleaned
+			.split(/\s+(?:and|&|vs\.?|versus)\s+|\//gi)
+			.map((segment) => canonicalizeLocationName(segment))
+			.filter((segment) => segment.length >= 2)
+	);
+}
+
+function findKeywordHits(text: string, keywords: readonly string[]): string[] {
+	const lower = text.toLowerCase();
+	const hits: string[] = [];
+	for (const keyword of keywords) {
+		if (lower.includes(keyword.toLowerCase())) {
+			hits.push(keyword);
+		}
+	}
+	return hits;
+}
+
+function extractBattlefield(title: string): string | undefined {
+	const matches = Array.from(title.matchAll(BATTLEFIELD_PATTERN));
+	for (const match of matches) {
+		const candidate = canonicalizeLocationName(match[1] ?? '');
+		if (isLikelyLocationName(candidate)) {
+			return candidate;
+		}
+	}
+	return undefined;
+}
+
+function extractActorsAndTargets(title: string): { actors: string[]; targets: string[]; location?: string } {
+	for (const pattern of ACTOR_TARGET_PATTERNS) {
+		const matched = title.match(pattern);
+		if (!matched?.groups) {
+			continue;
+		}
+
+		const actors = splitEntityPhrase(matched.groups.actor ?? '');
+		const targets = splitEntityPhrase(matched.groups.target ?? '');
+		const locationRaw = matched.groups.location;
+		const location = locationRaw ? canonicalizeLocationName(locationRaw) : undefined;
+
+		if (actors.length > 0 || targets.length > 0 || location) {
+			return { actors, targets, location };
+		}
+	}
+
+	return { actors: [], targets: [] };
+}
+
+function collectPowerActors(
+	text: string,
+	actors: string[],
+	majorPowers: readonly string[]
+): string[] {
+	const hitsFromText = findKeywordHits(text, majorPowers);
+	const actorHits = actors.filter((actor) =>
+		majorPowers.some((power) => actor.toLowerCase().includes(power.toLowerCase()))
+	);
+	return dedupeStrings([...actorHits, ...hitsFromText].map((value) => canonicalizeLocationName(value)));
+}
+
+export function extractStructuredHotspotEvents(
+	newsItems: NewsItem[],
+	options: ExtractStructuredEventOptions = {}
+): StructuredHotspotEvent[] {
+	const conflictKeywords = options.conflictKeywords ?? Array.from(DEFAULT_CONFLICT_KEYWORDS);
+	const interventionKeywords =
+		options.interventionKeywords ?? Array.from(DEFAULT_INTERVENTION_KEYWORDS);
+	const spilloverKeywords = options.spilloverKeywords ?? Array.from(DEFAULT_SPILLOVER_KEYWORDS);
+	const strategicKeywords = options.strategicKeywords ?? Array.from(DEFAULT_STRATEGIC_KEYWORDS);
+	const majorPowers = options.majorPowers ?? Array.from(DEFAULT_MAJOR_POWERS);
+
+	const events: StructuredHotspotEvent[] = [];
+
+	for (const item of newsItems) {
+		const contextText = `${item.title}. ${item.description ?? ''}`;
+		const conflictSignals = findKeywordHits(contextText, conflictKeywords);
+		const interventionSignals = findKeywordHits(contextText, interventionKeywords);
+		const spilloverSignals = findKeywordHits(contextText, spilloverKeywords);
+		const strategicSignals = findKeywordHits(contextText, strategicKeywords);
+
+		const parsed = extractActorsAndTargets(item.title);
+		const extractedLocations = dedupeStrings(
+			extractCandidatesFromItem(item)
+				.map((candidate) => canonicalizeLocationName(candidate.value))
+				.filter((candidate) => isLikelyLocationName(candidate))
+		);
+
+		const battlefield =
+			parsed.location && isLikelyLocationName(parsed.location)
+				? parsed.location
+				: extractBattlefield(item.title);
+		const locations = dedupeStrings(
+			battlefield
+				? [battlefield, ...extractedLocations]
+				: extractedLocations
+		);
+		const actors = dedupeStrings(parsed.actors);
+		const targets = dedupeStrings(parsed.targets);
+		const powerActors = collectPowerActors(contextText, actors, majorPowers);
+
+		const hasSignals =
+			locations.length > 0 ||
+			targets.length > 0 ||
+			conflictSignals.length > 0 ||
+			interventionSignals.length > 0 ||
+			spilloverSignals.length > 0;
+
+		if (!hasSignals) {
+			continue;
+		}
+
+		let confidence = 0.2;
+		if (actors.length > 0) confidence += 0.2;
+		if (targets.length > 0) confidence += 0.2;
+		if (battlefield) confidence += 0.2;
+		if (locations.length > 0) confidence += 0.1;
+		if (conflictSignals.length > 0) confidence += 0.1;
+		if (powerActors.length > 0 && interventionSignals.length > 0) confidence += 0.1;
+		if (spilloverSignals.length > 0) confidence += 0.05;
+
+		events.push({
+			item,
+			actors,
+			targets,
+			locations,
+			battlefield,
+			conflictSignals,
+			interventionSignals,
+			spilloverSignals,
+			strategicSignals,
+			powerActors,
+			confidence: Math.min(1, confidence)
+		});
+	}
+
+	return events;
 }

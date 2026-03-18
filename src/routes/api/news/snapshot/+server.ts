@@ -1,11 +1,22 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 import { DEFAULT_NEWS_LIMIT } from '$lib/server/news/constants';
 import { getLatestNewsSnapshot, runNewsIngestion } from '$lib/server/news/ingest';
 
 export const prerender = false;
 
 let bootstrapPromise: Promise<void> | null = null;
+
+function shouldBootstrapOnEmptySnapshot(): boolean {
+	const configured = env.NEWS_BOOTSTRAP_ON_EMPTY?.trim().toLowerCase();
+
+	if (!configured) {
+		return true;
+	}
+
+	return !['0', 'false', 'off', 'no'].includes(configured);
+}
 
 function normalizeLimit(input: string | null): number {
 	if (!input) {
@@ -40,7 +51,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const limit = normalizeLimit(url.searchParams.get('limit'));
 		let snapshot = await getLatestNewsSnapshot(limit);
 
-		if (snapshot.totalItems === 0) {
+		if (snapshot.totalItems === 0 && shouldBootstrapOnEmptySnapshot()) {
 			await ensureInitialData();
 			snapshot = await getLatestNewsSnapshot(limit);
 		}

@@ -1,0 +1,8 @@
+[Unit]
+Description=Situation Monitor News Ingest Worker
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/situation-monitor-news-worker
+ExecStart=/usr/bin/bash /opt/situation-monitor-news-worker/run.sh once

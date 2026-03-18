@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { onMount } from 'svelte';
 	import { Panel } from '$lib/components/common';
 	import { language, ui, hotspotsStore } from '$lib/stores';
@@ -38,13 +38,16 @@
 	let d3Module: typeof import('d3') | null = null;
 	let svg: any = null;
 	let mapGroup: any = null;
+	let overlayGroup: any = null;
 	let projection: any = null;
 	let path: any = null;
 	let zoom: any = null;
+	let currentZoomTransform: any = null;
 	/* eslint-enable @typescript-eslint/no-explicit-any */
 
 	const WIDTH = 800;
 	const HEIGHT = 400;
+	const CORRUPTED_TEXT_PATTERN = /�|Ã.|â.|鈭/;
 
 	// Tooltip state
 	let tooltipContent = $state<{
@@ -77,12 +80,27 @@
 		dataCache[key] = { data, timestamp: Date.now() };
 	}
 
+	function sanitizeDisplayText(value: string | null | undefined): string {
+		if (!value) return '';
+		const normalized = value
+			.replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+			.replace(/\s+/g, ' ')
+			.trim();
+		if (!normalized) return '';
+		if (!CORRUPTED_TEXT_PATTERN.test(normalized)) return normalized;
+		return normalized.replace(CORRUPTED_TEXT_PATTERN, ' ').replace(/\s+/g, ' ').trim();
+	}
+
 	function getHotspotDisplayName(hotspot: Hotspot): string {
-		return hotspot.nameLocalized?.[$language] ?? translateMapText(hotspot.name, $language);
+		return sanitizeDisplayText(
+			hotspot.nameLocalized?.[$language] ?? translateMapText(hotspot.name, $language)
+		);
 	}
 
 	function getHotspotSummary(hotspot: Hotspot): string {
-		return hotspot.summary?.[$language] ?? translateMapText(hotspot.desc, $language);
+		return sanitizeDisplayText(
+			hotspot.summary?.[$language] ?? translateMapText(hotspot.desc, $language)
+		);
 	}
 
 	// Get local time at longitude
@@ -124,13 +142,22 @@
 			const result: WeatherResult = {
 				temp: tempF,
 				wind: wind ? Math.round(wind) : null,
-				condition: WEATHER_CODES[code] || '—'
+				condition: WEATHER_CODES[code] || '未知'
 			};
 			setCachedData(key, result);
 			return result;
 		} catch {
 			return null;
 		}
+	}
+
+	function projectScreenPoint(lon: number, lat: number): [number, number] | null {
+		if (!projection) return null;
+		const projected = projection([lon, lat]);
+		if (!projected) return null;
+		const [baseX, baseY] = projected as [number, number];
+		if (!currentZoomTransform) return [baseX, baseY];
+		return currentZoomTransform.apply([baseX, baseY]) as [number, number];
 	}
 
 	// Enable zoom/pan behavior on the map
@@ -175,7 +202,11 @@
 	): void {
 		if (!mapContainer) return;
 		const rect = mapContainer.getBoundingClientRect();
-		tooltipContent = { title, color, lines };
+		tooltipContent = {
+			title: sanitizeDisplayText(title),
+			color,
+			lines: lines.map((line) => sanitizeDisplayText(line)).filter(Boolean)
+		};
 		tooltipPosition = {
 			left: event.clientX - rect.left + 15,
 			top: event.clientY - rect.top - 10
@@ -230,9 +261,11 @@
 
 		d3Module.select(svgEl).selectAll('*').remove();
 		mapGroup = null;
+		overlayGroup = null;
 		projection = null;
 		path = null;
 		zoom = null;
+		currentZoomTransform = null;
 		await initMap();
 	}
 
@@ -249,25 +282,35 @@
 		svg.attr('viewBox', `0 0 ${WIDTH} ${HEIGHT}`);
 
 		mapGroup = svg.append('g').attr('id', 'mapGroup');
+		overlayGroup = svg.append('g').attr('id', 'overlayGroup');
+		currentZoomTransform = d3.zoomIdentity;
 
-		// Setup zoom - disable scroll wheel, allow touch pinch and buttons
+		// Setup zoom with bounded panning and wheel zoom support
 		zoom = d3
 			.zoom<SVGSVGElement, unknown>()
 			.scaleExtent([1, 6])
+			.extent([
+				[0, 0],
+				[WIDTH, HEIGHT]
+			])
+			.translateExtent([
+				[0, 0],
+				[WIDTH, HEIGHT]
+			])
 			.filter((event) => {
-				// Block scroll wheel zoom (wheel events)
-				if (event.type === 'wheel') return false;
-				// Allow touch events (pinch zoom on mobile)
-				if (event.type.startsWith('touch')) return true;
-				// Allow mouse drag for panning
-				if (event.type === 'mousedown' || event.type === 'mousemove') return true;
 				// Block double-click zoom
 				if (event.type === 'dblclick') return false;
-				// Allow other events (programmatic zoom from buttons)
+				// Ignore non-primary mouse buttons while keeping wheel/touch enabled
+				if ('button' in event && event.button !== 0) return false;
+				// Allow wheel, drag, touch and programmatic controls
 				return true;
 			})
 			.on('zoom', (event) => {
 				mapGroup.attr('transform', event.transform.toString());
+				currentZoomTransform = event.transform;
+				drawStaticOverlays();
+				drawHotspots(currentHotspots);
+				drawMonitors();
 			});
 
 		enableZoom();
@@ -387,123 +430,8 @@
 				}
 			});
 
-			// Draw chokepoints
-			CHOKEPOINTS.forEach((cp) => {
-				const [x, y] = projection([cp.lon, cp.lat]) || [0, 0];
-				if (x && y) {
-					mapGroup
-						.append('rect')
-						.attr('x', x - 4)
-						.attr('y', y - 4)
-						.attr('width', 8)
-						.attr('height', 8)
-						.attr('fill', '#00aaff')
-						.attr('opacity', 0.8)
-						.attr('transform', `rotate(45,${x},${y})`);
-					mapGroup
-						.append('text')
-						.attr('x', x + 8)
-						.attr('y', y + 3)
-						.attr('fill', '#00aaff')
-						.attr('font-size', '7px')
-						.attr('font-family', 'monospace')
-						.text(translateMapText(cp.name, $language));
-					mapGroup
-						.append('circle')
-						.attr('cx', x)
-						.attr('cy', y)
-						.attr('r', 10)
-						.attr('fill', 'transparent')
-						.attr('class', 'hotspot-hit')
-						.on('mouseenter', (event: MouseEvent) =>
-							showTooltip(event, `⬥ ${translateMapText(cp.desc, $language)}`, '#00aaff')
-						)
-						.on('mousemove', moveTooltip)
-						.on('mouseleave', hideTooltip);
-				}
-			});
-
-			// Draw cable landings
-			CABLE_LANDINGS.forEach((cl) => {
-				const [x, y] = projection([cl.lon, cl.lat]) || [0, 0];
-				if (x && y) {
-					mapGroup
-						.append('circle')
-						.attr('cx', x)
-						.attr('cy', y)
-						.attr('r', 3)
-						.attr('fill', 'none')
-						.attr('stroke', '#aa44ff')
-						.attr('stroke-width', 1.5);
-					mapGroup
-						.append('circle')
-						.attr('cx', x)
-						.attr('cy', y)
-						.attr('r', 10)
-						.attr('fill', 'transparent')
-						.attr('class', 'hotspot-hit')
-						.on('mouseenter', (event: MouseEvent) =>
-							showTooltip(event, `◎ ${translateMapText(cl.desc, $language)}`, '#aa44ff')
-						)
-						.on('mousemove', moveTooltip)
-						.on('mouseleave', hideTooltip);
-				}
-			});
-
-			// Draw nuclear sites
-			NUCLEAR_SITES.forEach((ns) => {
-				const [x, y] = projection([ns.lon, ns.lat]) || [0, 0];
-				if (x && y) {
-					mapGroup
-						.append('circle')
-						.attr('cx', x)
-						.attr('cy', y)
-						.attr('r', 2)
-						.attr('fill', '#ffff00');
-					mapGroup
-						.append('circle')
-						.attr('cx', x)
-						.attr('cy', y)
-						.attr('r', 5)
-						.attr('fill', 'none')
-						.attr('stroke', '#ffff00')
-						.attr('stroke-width', 1)
-						.attr('stroke-dasharray', '3,3');
-					mapGroup
-						.append('circle')
-						.attr('cx', x)
-						.attr('cy', y)
-						.attr('r', 10)
-						.attr('fill', 'transparent')
-						.attr('class', 'hotspot-hit')
-						.on('mouseenter', (event: MouseEvent) =>
-							showTooltip(event, `☢ ${translateMapText(ns.desc, $language)}`, '#ffff00')
-						)
-						.on('mousemove', moveTooltip)
-						.on('mouseleave', hideTooltip);
-				}
-			});
-
-			// Draw military bases
-			MILITARY_BASES.forEach((mb) => {
-				const [x, y] = projection([mb.lon, mb.lat]) || [0, 0];
-				if (x && y) {
-					const starPath = `M${x},${y - 5} L${x + 1.5},${y - 1.5} L${x + 5},${y - 1.5} L${x + 2.5},${y + 1} L${x + 3.5},${y + 5} L${x},${y + 2.5} L${x - 3.5},${y + 5} L${x - 2.5},${y + 1} L${x - 5},${y - 1.5} L${x - 1.5},${y - 1.5} Z`;
-					mapGroup.append('path').attr('d', starPath).attr('fill', '#ff00ff').attr('opacity', 0.8);
-					mapGroup
-						.append('circle')
-						.attr('cx', x)
-						.attr('cy', y)
-						.attr('r', 10)
-						.attr('fill', 'transparent')
-						.attr('class', 'hotspot-hit')
-						.on('mouseenter', (event: MouseEvent) =>
-							showTooltip(event, `★ ${translateMapText(mb.desc, $language)}`, '#ff00ff')
-						)
-						.on('mousemove', moveTooltip)
-						.on('mouseleave', hideTooltip);
-				}
-			});
+			// Draw fixed-size overlay markers
+			drawStaticOverlays();
 
 			// Draw hotspots (initial draw using current store value)
 			drawHotspots(currentHotspots);
@@ -517,17 +445,144 @@
 		}
 	}
 
-	// Draw hotspot markers — extracted so it can be called reactively
+	function drawStaticOverlays(): void {
+		if (!overlayGroup || !projection) return;
+		overlayGroup.selectAll('.static-overlay').remove();
+
+		CHOKEPOINTS.forEach((cp) => {
+			const point = projectScreenPoint(cp.lon, cp.lat);
+			if (!point) return;
+			const [x, y] = point;
+			const group = overlayGroup.append('g').attr('class', 'static-overlay');
+			group
+				.append('rect')
+				.attr('x', x - 4)
+				.attr('y', y - 4)
+				.attr('width', 8)
+				.attr('height', 8)
+				.attr('fill', '#00aaff')
+				.attr('opacity', 0.8)
+				.attr('transform', `rotate(45,${x},${y})`);
+			group
+				.append('text')
+				.attr('x', x + 8)
+				.attr('y', y + 3)
+				.attr('fill', '#00aaff')
+				.attr('font-size', '7px')
+				.attr('font-family', 'monospace')
+				.text(translateMapText(cp.name, $language));
+			group
+				.append('circle')
+				.attr('cx', x)
+				.attr('cy', y)
+				.attr('r', 10)
+				.attr('fill', 'transparent')
+				.attr('class', 'hotspot-hit')
+				.on('mouseenter', (event: MouseEvent) =>
+					showTooltip(event, translateMapText(cp.name, $language), '#00aaff', [
+						translateMapText(cp.desc, $language)
+					])
+				)
+				.on('mousemove', moveTooltip)
+				.on('mouseleave', hideTooltip);
+		});
+
+		CABLE_LANDINGS.forEach((cl) => {
+			const point = projectScreenPoint(cl.lon, cl.lat);
+			if (!point) return;
+			const [x, y] = point;
+			const group = overlayGroup.append('g').attr('class', 'static-overlay');
+			group
+				.append('circle')
+				.attr('cx', x)
+				.attr('cy', y)
+				.attr('r', 3)
+				.attr('fill', 'none')
+				.attr('stroke', '#aa44ff')
+				.attr('stroke-width', 1.5);
+			group
+				.append('circle')
+				.attr('cx', x)
+				.attr('cy', y)
+				.attr('r', 10)
+				.attr('fill', 'transparent')
+				.attr('class', 'hotspot-hit')
+				.on('mouseenter', (event: MouseEvent) =>
+					showTooltip(event, translateMapText(cl.name, $language), '#aa44ff', [
+						translateMapText(cl.desc, $language)
+					])
+				)
+				.on('mousemove', moveTooltip)
+				.on('mouseleave', hideTooltip);
+		});
+
+		NUCLEAR_SITES.forEach((ns) => {
+			const point = projectScreenPoint(ns.lon, ns.lat);
+			if (!point) return;
+			const [x, y] = point;
+			const group = overlayGroup.append('g').attr('class', 'static-overlay');
+			group.append('circle').attr('cx', x).attr('cy', y).attr('r', 2).attr('fill', '#ffff00');
+			group
+				.append('circle')
+				.attr('cx', x)
+				.attr('cy', y)
+				.attr('r', 5)
+				.attr('fill', 'none')
+				.attr('stroke', '#ffff00')
+				.attr('stroke-width', 1)
+				.attr('stroke-dasharray', '3,3');
+			group
+				.append('circle')
+				.attr('cx', x)
+				.attr('cy', y)
+				.attr('r', 10)
+				.attr('fill', 'transparent')
+				.attr('class', 'hotspot-hit')
+				.on('mouseenter', (event: MouseEvent) =>
+					showTooltip(event, translateMapText(ns.name, $language), '#ffff00', [
+						translateMapText(ns.desc, $language)
+					])
+				)
+				.on('mousemove', moveTooltip)
+				.on('mouseleave', hideTooltip);
+		});
+
+		MILITARY_BASES.forEach((mb) => {
+			const point = projectScreenPoint(mb.lon, mb.lat);
+			if (!point) return;
+			const [x, y] = point;
+			const group = overlayGroup.append('g').attr('class', 'static-overlay');
+			const starPath = `M${x},${y - 5} L${x + 1.5},${y - 1.5} L${x + 5},${y - 1.5} L${x + 2.5},${y + 1} L${x + 3.5},${y + 5} L${x},${y + 2.5} L${x - 3.5},${y + 5} L${x - 2.5},${y + 1} L${x - 5},${y - 1.5} L${x - 1.5},${y - 1.5} Z`;
+			group.append('path').attr('d', starPath).attr('fill', '#ff00ff').attr('opacity', 0.8);
+			group
+				.append('circle')
+				.attr('cx', x)
+				.attr('cy', y)
+				.attr('r', 10)
+				.attr('fill', 'transparent')
+				.attr('class', 'hotspot-hit')
+				.on('mouseenter', (event: MouseEvent) =>
+					showTooltip(event, translateMapText(mb.name, $language), '#ff00ff', [
+						translateMapText(mb.desc, $language)
+					])
+				)
+				.on('mousemove', moveTooltip)
+				.on('mouseleave', hideTooltip);
+		});
+	}
+
+	// Draw hotspot markers extracted so it can be called reactively
 	function drawHotspots(hotspots: Hotspot[]): void {
-		if (!mapGroup || !projection) return;
-		mapGroup.selectAll('.hotspot-group').remove();
+		if (!overlayGroup || !projection) return;
+		overlayGroup.selectAll('.hotspot-group').remove();
 
 		hotspots.forEach((h) => {
-			const [x, y] = projection([h.lon, h.lat]) || [0, 0];
-			if (x && y) {
+			const point = projectScreenPoint(h.lon, h.lat);
+			if (point) {
+				const [x, y] = point;
 				const color = THREAT_COLORS[h.level];
 				// Pulsing circle
-				mapGroup
+				overlayGroup
 					.append('circle')
 					.attr('class', 'hotspot-group pulse')
 					.attr('cx', x)
@@ -536,7 +591,7 @@
 					.attr('fill', color)
 					.attr('fill-opacity', 0.3);
 				// Inner dot
-				mapGroup
+				overlayGroup
 					.append('circle')
 					.attr('class', 'hotspot-group')
 					.attr('cx', x)
@@ -544,7 +599,7 @@
 					.attr('r', 3)
 					.attr('fill', color);
 				// Label
-				mapGroup
+				overlayGroup
 					.append('text')
 					.attr('class', 'hotspot-group')
 					.attr('x', x + 8)
@@ -554,7 +609,7 @@
 					.attr('font-family', 'monospace')
 					.text(getHotspotDisplayName(h));
 				// Hit area
-				mapGroup
+				overlayGroup
 					.append('circle')
 					.attr('class', 'hotspot-group hotspot-hit')
 					.attr('cx', x)
@@ -570,19 +625,20 @@
 
 	// Draw custom monitor locations
 	function drawMonitors(): void {
-		if (!mapGroup || !projection) return;
+		if (!overlayGroup || !projection) return;
 
 		// Remove existing monitor markers
-		mapGroup.selectAll('.monitor-marker').remove();
+		overlayGroup.selectAll('.monitor-marker').remove();
 
 		monitors
 			.filter((m) => m.enabled && m.location)
 			.forEach((m) => {
 				if (!m.location) return;
-				const [x, y] = projection([m.location.lon, m.location.lat]) || [0, 0];
-				if (x && y) {
+				const point = projectScreenPoint(m.location.lon, m.location.lat);
+				if (point) {
+					const [x, y] = point;
 					const color = m.color || '#00ffff';
-					mapGroup
+					overlayGroup
 						.append('circle')
 						.attr('class', 'monitor-marker')
 						.attr('cx', x)
@@ -592,7 +648,7 @@
 						.attr('fill-opacity', 0.6)
 						.attr('stroke', color)
 						.attr('stroke-width', 2);
-					mapGroup
+					overlayGroup
 						.append('text')
 						.attr('class', 'monitor-marker')
 						.attr('x', x + 8)
@@ -601,7 +657,7 @@
 						.attr('font-size', '8px')
 						.attr('font-family', 'monospace')
 						.text(m.name);
-					mapGroup
+					overlayGroup
 						.append('circle')
 						.attr('class', 'monitor-marker')
 						.attr('cx', x)
@@ -696,8 +752,8 @@
 		{/if}
 		<div class="zoom-controls">
 			<button class="zoom-btn" onclick={zoomIn} title={$ui.common.zoomIn}>+</button>
-			<button class="zoom-btn" onclick={zoomOut} title={$ui.common.zoomOut}>−</button>
-			<button class="zoom-btn" onclick={resetZoom} title={$ui.common.reset}>⟲</button>
+			<button class="zoom-btn" onclick={zoomOut} title={$ui.common.zoomOut}>-</button>
+			<button class="zoom-btn" onclick={resetZoom} title={$ui.common.reset}>R</button>
 		</div>
 		<div class="map-legend">
 			<div class="legend-item">
@@ -766,6 +822,7 @@
 	.map-svg {
 		width: 100%;
 		height: 100%;
+		touch-action: none;
 	}
 
 	.map-tooltip {
@@ -914,3 +971,6 @@
 		}
 	}
 </style>
+
+
+

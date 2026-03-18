@@ -1,9 +1,3 @@
 {
-  "framework": "sveltekit",
-  "crons": [
-    {
-      "path": "/api/cron/news-refresh",
-      "schedule": "0 * * * *"
-    }
-  ]
+	"framework": "sveltekit"
 }

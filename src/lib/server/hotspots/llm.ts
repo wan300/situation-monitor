@@ -6,6 +6,7 @@
  */
 
 import type { Hotspot } from '$lib/config/map';
+import type { NewsItem } from '$lib/types';
 import { SILICONFLOW_API_KEY, SILICONFLOW_BASE_URL, SILICONFLOW_MODEL } from '$lib/config/api';
 import { translateMapText } from '$lib/i18n';
 import type { HotspotScore } from './analyze';
@@ -26,11 +27,24 @@ interface LlmEnrichmentResult {
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
+const CORRUPTED_TEXT_PATTERN = /�|Ã.|â.|鈭/;
+
 function normalizeLocalizedName(value: string): string {
 	return value
 		.toLowerCase()
 		.replace(/[\s·•'"`.-]/g, '')
 		.trim();
+}
+
+function sanitizeModelText(value: string): string {
+	return value.replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function isCorruptedModelText(value: string | undefined): boolean {
+	if (!value) return false;
+	const sanitized = sanitizeModelText(value);
+	if (!sanitized) return true;
+	return CORRUPTED_TEXT_PATTERN.test(sanitized);
 }
 
 function isConsistentLocalizedName(
@@ -66,7 +80,7 @@ function isConsistentLocalizedName(
 	return false;
 }
 
-async function callLlm(messages: ChatMessage[]): Promise<string> {
+async function callLlm(messages: ChatMessage[], maxTokens = 300): Promise<string> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
@@ -82,7 +96,7 @@ async function callLlm(messages: ChatMessage[]): Promise<string> {
 				model: SILICONFLOW_MODEL,
 				messages,
 				temperature: 0.3,
-				max_tokens: 300,
+				max_tokens: maxTokens,
 				response_format: { type: 'json_object' }
 			})
 		});
@@ -113,16 +127,19 @@ function parseEnrichmentResult(raw: string, fallback: Hotspot): LlmEnrichmentRes
 			: fallback.level;
 
 		const summaryEn =
-			typeof parsed.summary_en === 'string' && parsed.summary_en.trim().length > 0
-				? parsed.summary_en.trim()
+			typeof parsed.summary_en === 'string' && parsed.summary_en.trim().length > 0 &&
+				!isCorruptedModelText(parsed.summary_en)
+				? sanitizeModelText(parsed.summary_en)
 				: fallbackSummaryEn;
 		const summaryZh =
-			typeof parsed.summary_zh === 'string' && parsed.summary_zh.trim().length > 0
-				? parsed.summary_zh.trim()
+			typeof parsed.summary_zh === 'string' && parsed.summary_zh.trim().length > 0 &&
+				!isCorruptedModelText(parsed.summary_zh)
+				? sanitizeModelText(parsed.summary_zh)
 				: fallbackSummaryZh;
 		const nameZh =
-			typeof parsed.name_zh === 'string' && parsed.name_zh.trim().length > 0
-				? parsed.name_zh.trim()
+			typeof parsed.name_zh === 'string' && parsed.name_zh.trim().length > 0 &&
+				!isCorruptedModelText(parsed.name_zh)
+				? sanitizeModelText(parsed.name_zh)
 				: fallbackNameZh;
 
 		return {
@@ -192,6 +209,101 @@ Assess the current situation and respond with JSON.`;
 			'zh-CN': validatedNameZh
 		}
 	};
+}
+
+export interface LlmEventExtraction {
+	id: string;
+	actors: string[];
+	targets: string[];
+	locations: string[];
+	battlefield?: string;
+	confidence: number;
+}
+
+const MAX_EVENT_EXTRACTION_ITEMS = 40;
+const EVENT_EXTRACTION_BATCH_SIZE = 10;
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+	if (size <= 0) return [items];
+	const chunks: T[][] = [];
+	for (let i = 0; i < items.length; i += size) {
+		chunks.push(items.slice(i, i + size));
+	}
+	return chunks;
+}
+
+function parseEventExtractionResult(raw: string): LlmEventExtraction[] {
+	try {
+		const parsed = JSON.parse(raw) as {
+			events?: Array<Partial<LlmEventExtraction>>;
+		};
+		if (!Array.isArray(parsed.events)) {
+			return [];
+		}
+		return parsed.events
+			.filter((event) => typeof event.id === 'string' && event.id.length > 0)
+			.map((event) => ({
+				id: String(event.id),
+				actors: Array.isArray(event.actors)
+					? event.actors.filter((value): value is string => typeof value === 'string')
+					: [],
+				targets: Array.isArray(event.targets)
+					? event.targets.filter((value): value is string => typeof value === 'string')
+					: [],
+				locations: Array.isArray(event.locations)
+					? event.locations.filter((value): value is string => typeof value === 'string')
+					: [],
+				battlefield:
+					typeof event.battlefield === 'string' && event.battlefield.trim().length > 0
+						? event.battlefield.trim()
+						: undefined,
+				confidence:
+					typeof event.confidence === 'number' && Number.isFinite(event.confidence)
+						? Math.max(0, Math.min(1, event.confidence))
+						: 0.5
+			}));
+	} catch {
+		return [];
+	}
+}
+
+export async function extractHeadlineEventsWithLLM(
+	newsItems: NewsItem[]
+): Promise<Map<string, LlmEventExtraction>> {
+	if (!SILICONFLOW_API_KEY) {
+		return new Map();
+	}
+
+	const candidates = newsItems.slice(0, MAX_EVENT_EXTRACTION_ITEMS);
+	if (candidates.length === 0) {
+		return new Map();
+	}
+
+	const eventMap = new Map<string, LlmEventExtraction>();
+	const batches = chunkArray(candidates, EVENT_EXTRACTION_BATCH_SIZE);
+
+	for (const batch of batches) {
+		const lines = batch.map((item) => `- id: ${item.id} | title: ${item.title}`).join('\n');
+		const systemPrompt = `Extract geopolitical event structure from headlines. Reply ONLY JSON:\n{\n  \"events\": [\n    {\n      \"id\": \"string\",\n      \"actors\": [\"...\"],\n      \"targets\": [\"...\"],\n      \"locations\": [\"...\"],\n      \"battlefield\": \"string or empty\",\n      \"confidence\": 0.0\n    }\n  ]\n}`;
+		const userPrompt = `Headlines:\n${lines}\n\nRules:\n1) battlefield must be the primary location of conflict if explicit.\n2) If actor sanctions target, target is not actor.\n3) Keep arrays concise and factual.`;
+
+		try {
+			const raw = await callLlm(
+				[
+					{ role: 'system', content: systemPrompt },
+					{ role: 'user', content: userPrompt }
+				],
+				900
+			);
+			for (const event of parseEventExtractionResult(raw)) {
+				eventMap.set(event.id, event);
+			}
+		} catch (error) {
+			console.warn('[hotspots/llm] headline extraction failed:', error);
+		}
+	}
+
+	return eventMap;
 }
 
 /**

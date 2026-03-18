@@ -4,7 +4,7 @@
 
 - 在线地址: https://hipcityreg.github.io/situation-monitor/
 - 技术基座: SvelteKit 2 + Svelte 5 + TypeScript + Tailwind CSS
-- 部署形态: Vercel 全栈 (前端 + Serverless API + Cron)
+- 部署形态: Vercel 全栈 (前端 + Serverless API) + 独立 News Worker (服务器 cron/systemd)
 
 ## 1. 项目目标
 
@@ -40,7 +40,7 @@
 ### 2.4 双语与刷新机制
 
 - 内置中文/英文双语 UI
-- 新闻数据由后端每小时定时抓取并入库
+- 新闻数据由独立 Worker 定时抓取并入库
 - 前端刷新优先读取后端快照，避免页面刷新触发外部新闻源全量请求
 - 分阶段刷新策略，降低峰值请求压力
 
@@ -51,7 +51,7 @@
 - 样式: Tailwind CSS + 自定义主题变量
 - 构建: Vite 6
 - 测试: Vitest (单测) + Playwright (E2E)
-- 部署: `@sveltejs/adapter-vercel` (支持 API 路由与 Cron)
+- 部署: `@sveltejs/adapter-vercel` (支持 API 路由) + `workers/news-ingest` 独立抓取
 - 可视化: D3.js (地图)
 
 ## 4. 快速开始
@@ -94,6 +94,7 @@ VITE_FRED_API_KEY=your_fred_key
 TURSO_DATABASE_URL=libsql://your-db.turso.io
 TURSO_AUTH_TOKEN=your_turso_token
 NEWS_CRON_SECRET=your_cron_secret
+NEWS_BOOTSTRAP_ON_EMPTY=true
 ```
 
 另外，部署到子路径时可设置:
@@ -107,7 +108,8 @@ BASE_PATH=/situation-monitor
 - `VITE_FINNHUB_API_KEY` 用于指数/板块/商品等市场数据
 - `VITE_FRED_API_KEY` 用于美联储经济指标与资产负债表面板
 - `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` 用于后端新闻持久化存储
-- `NEWS_CRON_SECRET` 用于保护 `/api/cron/news-refresh` 定时任务触发端点
+- `NEWS_CRON_SECRET` 用于保护 `/api/cron/news-refresh` 手动触发端点
+- `NEWS_BOOTSTRAP_ON_EMPTY` 控制空库时 `/api/news/snapshot` 是否自动触发抓取（独立 Worker 模式建议设为 `false`）
 - 未配置 key 时，相关面板会回退为“空数据/占位状态”，不影响应用启动
 
 ## 6. 常用脚本
@@ -121,6 +123,8 @@ npm run check:watch  # 持续类型检查
 npm run test         # Vitest watch
 npm run test:unit    # Vitest 单次运行
 npm run test:e2e     # Playwright E2E
+npm run worker:news:once   # 运行一次独立新闻抓取 worker
+npm run worker:news:health # 查看 worker 数据健康状态
 npm run lint         # ESLint + Prettier 校验
 npm run format       # Prettier 自动格式化
 ```
@@ -145,6 +149,8 @@ src/
     types/         # TS 类型定义
     utils/         # 通用工具
   routes/          # SvelteKit 路由入口
+workers/
+  news-ingest/     # 独立新闻抓取 worker（可部署到服务器持续运行）
 tests/
   e2e/             # Playwright 端到端测试
 ```
@@ -207,12 +213,13 @@ $types      -> src/lib/types
 
 ## 11. 部署说明
 
-项目使用 Vercel 适配器，支持服务端 API 与定时任务:
+项目使用 Vercel 适配器承载前端和 API，新闻抓取由独立 Worker 承担:
 
 - `prerender = true`
 - `ssr = false`
 - API 路由: `src/routes/api/**`
-- Cron 路由: `/api/cron/news-refresh` (每小时)
+- 独立抓取入口: `workers/news-ingest/index.mjs`
+- 推荐调度: 服务器 `cron` 或 `systemd timer`
 - 本地 Windows 采用 `adapter-node` 规避 symlink 权限问题，CI/Vercel 自动使用 `adapter-vercel`
 
 如需部署到子路径可设置:

@@ -10,4 +10,4 @@ export const NEWS_CATEGORIES: NewsCategory[] = [
 ];
 
 export const DEFAULT_NEWS_LIMIT = 20;
-export const NEWS_RETENTION_DAYS = 30;
+export const NEWS_RETENTION_DAYS = 90;
